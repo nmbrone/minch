@@ -172,7 +172,9 @@ defmodule MinchTest do
       assert_receive {:ws_server_init, server}
       :ok = Server.send_frame(server, :close)
       assert_receive {:frame, ^ref, {:close, 1000, ""}}
-      assert_receive {:DOWN, _ref, :process, ^pid, :normal}
+
+      assert_receive {:DOWN, _ref, :process, ^pid,
+                      {:shutdown, %Mint.TransportError{reason: :closed}}}
     end
   end
 end

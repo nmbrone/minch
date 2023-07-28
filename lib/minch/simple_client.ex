@@ -51,13 +51,13 @@ defmodule Minch.SimpleClient do
 
       {:error, error} ->
         GenServer.reply(from, {:error, error})
-        {:stop, :normal, state}
+        {:stop, {:shutdown, error}, state}
     end
   end
 
   @impl true
-  def handle_info({:DOWN, _ref, :process, pid, _reason}, %{receiver: pid} = state) do
-    {:stop, :normal, state}
+  def handle_info({:DOWN, _ref, :process, pid, _reason} = message, %{receiver: pid} = state) do
+    {:stop, {:shutdown, message}, state}
   end
 
   def handle_info(message, state) do
@@ -69,7 +69,7 @@ defmodule Minch.SimpleClient do
         {:noreply, handle_frames(%{state | conn: conn}, frames)}
 
       {:error, error} ->
-        {:stop, :normal, reply(state, {:error, error})}
+        {:stop, {:shutdown, error}, reply(state, {:error, error})}
 
       :unknown ->
         {:noreply, state}
