@@ -1,5 +1,7 @@
 # Minch
 
+[![CI](https://github.com/nmbrone/minch/actions/workflows/ci.yml/badge.svg)](https://github.com/nmbrone/minch/actions/workflows/ci.yml)
+
 A WebSocket client build around [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
 
 ## Installation
