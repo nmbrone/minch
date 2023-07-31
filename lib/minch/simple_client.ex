@@ -62,25 +62,33 @@ defmodule Minch.SimpleClient do
 
   def handle_info(message, state) do
     case Minch.Conn.stream(state.conn, message) do
-      {:ok, conn, []} ->
-        {:noreply, reply(%{state | conn: conn}, {:ok, conn.request_ref})}
+      {:ok, conn, response} ->
+        {:noreply, %{state | conn: conn} |> handle_connect(response) |> handle_frames(response)}
 
-      {:ok, conn, frames} ->
-        {:noreply, handle_frames(%{state | conn: conn}, frames)}
-
-      {:error, error} ->
-        {:stop, {:shutdown, error}, reply(state, {:error, error})}
+      {:error, conn, error} ->
+        {:stop, {:shutdown, error}, handle_disconnect(%{state | conn: conn}, error)}
 
       :unknown ->
         {:noreply, state}
     end
   end
 
-  defp reply(%{caller: nil} = state, _message), do: state
-
-  defp reply(%{caller: caller} = state, message) do
-    GenServer.reply(caller, message)
+  defp handle_connect(state, %{status: _}) do
+    GenServer.reply(state.caller, {:ok, state.conn.request_ref})
     %{state | caller: nil}
+  end
+
+  defp handle_connect(state, _response), do: state
+
+  defp handle_disconnect(%{caller: caller} = state, error) when caller != nil do
+    GenServer.reply(caller, {:error, error})
+    %{state | caller: nil}
+  end
+
+  defp handle_disconnect(state, _error), do: state
+
+  defp handle_frames(state, %{frames: frames}) do
+    handle_frames(state, frames)
   end
 
   defp handle_frames(state, [frame | rest]) do
@@ -89,7 +97,7 @@ defmodule Minch.SimpleClient do
     |> handle_frames(rest)
   end
 
-  defp handle_frames(state, []), do: state
+  defp handle_frames(state, _), do: state
 
   defp handle_frame(frame, state) do
     send(state.receiver, {:frame, state.conn.request_ref, frame})

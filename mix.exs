@@ -21,7 +21,7 @@ defmodule Minch.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:cowboy, "~> 2.9", optional: true},
+      {:cowboy, "~> 2.9", only: :test},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:mint_web_socket, "~> 1.0"}
     ]
