@@ -54,7 +54,7 @@ defmodule Minch.Client do
         {:noreply, %{state | conn: conn}}
 
       {:error, error} ->
-        handle_disconnect(error, state)
+        {:noreply, handle_disconnect(state, error)}
     end
   end
 
@@ -69,27 +69,27 @@ defmodule Minch.Client do
 
   def handle_info(message, state) do
     case Minch.Conn.stream(state.conn, message) do
-      {:ok, conn, []} ->
-        handle_connect(%{state | conn: conn})
+      {:ok, conn, response} ->
+        {:noreply, %{state | conn: conn} |> handle_connect(response) |> handle_frames(response)}
 
-      {:ok, conn, frames} ->
-        {:noreply, handle_frames(%{state | conn: conn}, frames)}
-
-      {:error, error} ->
-        handle_disconnect(error, state)
+      {:error, conn, error} ->
+        Minch.Conn.close(conn)
+        {:noreply, handle_disconnect(%{state | conn: nil}, error)}
 
       :unknown ->
         do_handle_info(message, state)
     end
   end
 
-  defp handle_frames(state, [frame | rest]) do
-    frame
-    |> handle_frame(state)
-    |> handle_frames(rest)
+  defp handle_frames(state, %{frames: frames}) do
+    handle_frames(state, frames)
   end
 
-  defp handle_frames(state, []), do: state
+  defp handle_frames(state, [frame | rest]) do
+    frame |> handle_frame(state) |> handle_frames(rest)
+  end
+
+  defp handle_frames(state, _), do: state
 
   defp handle_frame(frame, state) do
     case state.callback.handle_frame(frame, state.callback_state) do
@@ -113,27 +113,27 @@ defmodule Minch.Client do
     end
   end
 
-  defp handle_connect(state) do
+  defp handle_connect(state, %{status: _}) do
     case state.callback.handle_connect(state.callback_state) do
       {:ok, callback_state} ->
-        {:noreply, %{state | callback_state: callback_state}}
+        %{state | callback_state: callback_state}
 
       {:reply, frame, callback_state} ->
         {:ok, state} = send_reply(state, frame)
-        {:noreply, %{state | callback_state: callback_state}}
+        %{state | callback_state: callback_state}
     end
   end
 
-  defp handle_disconnect(error, state) do
-    state = %{state | conn: nil}
+  defp handle_connect(state, _response), do: state
 
+  defp handle_disconnect(state, error) do
     case state.callback.handle_disconnect(error, state.callback_state) do
       {:reconnect, backoff, callback_state} ->
         timer = Process.send_after(self(), {:"$minch", :reconnect}, backoff)
-        {:noreply, %{state | callback_state: callback_state, timer: timer}}
+        %{state | callback_state: callback_state, timer: timer}
 
       {:ok, callback_state} ->
-        {:noreply, %{state | callback_state: callback_state}}
+        %{state | callback_state: callback_state}
     end
   end
 

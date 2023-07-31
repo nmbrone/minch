@@ -1,17 +1,25 @@
 defmodule Minch.Conn do
+  @moduledoc false
+
   @type t :: %__MODULE__{
           conn: Mint.HTTP.t(),
           request_ref: Mint.Types.request_ref(),
-          status: non_neg_integer() | nil,
-          headers: Mint.Types.headers() | nil,
           websocket: Mint.WebSocket.t() | nil
         }
 
-  defstruct [:conn, :request_ref, :websocket, :status, :headers]
+  defstruct [:conn, :request_ref, :websocket]
+
+  @type response :: %{
+          optional(:status) => Mint.Types.status(),
+          optional(:headers) => Mint.Types.headers(),
+          optional(:data) => binary(),
+          optional(:error) => term(),
+          optional(:frames) => [Mint.WebSocket.frame()]
+        }
 
   @spec open?(t()) :: boolean()
-  def open?(state) do
-    Mint.HTTP.open?(state.conn) and not is_nil(state.websocket)
+  def open?(c) do
+    Mint.HTTP.open?(c.conn)
   end
 
   @spec open(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
@@ -58,8 +66,8 @@ defmodule Minch.Conn do
 
   @spec close(t()) :: t()
   def close(c) do
-    if open?(c) do
-      send_frame(c, :close)
+    if Mint.HTTP.open?(c.conn) do
+      unless is_nil(c.websocket), do: send_frame(c, :close)
       {:ok, conn} = Mint.HTTP.close(c.conn)
       %{c | conn: conn}
     else
@@ -69,8 +77,8 @@ defmodule Minch.Conn do
 
   @spec send_frame(t(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
           {:ok, t()} | {:error, t(), term()}
-  def send_frame(c, frame) when c.websocket != nil do
-    case Mint.WebSocket.encode(c.websocket, frame) do
+  def send_frame(%{websocket: websocket} = c, frame) when websocket != nil do
+    case Mint.WebSocket.encode(websocket, frame) do
       {:ok, websocket, data} ->
         case Mint.WebSocket.stream_request_body(c.conn, c.request_ref, data) do
           {:ok, conn} ->
@@ -86,50 +94,58 @@ defmodule Minch.Conn do
   end
 
   @spec stream(t(), term()) ::
-          {:ok, t(), [Mint.WebSocket.frame()]} | {:error, Mint.WebSocket.error()} | :unknown
+          {:ok, t(), response()}
+          | {:error, t(), Mint.WebSocket.error()}
+          | :unknown
   def stream(c, http_reply) do
     case Mint.WebSocket.stream(c.conn, http_reply) do
       {:ok, conn, responses} ->
-        handle_responses(%{c | conn: conn}, responses)
+        responses
+        |> build_response(c.request_ref)
+        |> handle_response(%{c | conn: conn})
 
       {:error, conn, error, _responses} ->
-        Mint.HTTP.close(conn)
-        {:error, error}
+        {:error, %{c | conn: conn}, error}
 
       :unknown ->
         :unknown
     end
   end
 
-  # upgrade response
-  defp handle_responses(%{conn: conn, request_ref: ref, websocket: nil} = c, responses) do
-    resp =
-      Enum.reduce(responses, %{status: nil, headers: nil, data: nil}, fn
-        {:status, ^ref, status}, resp -> %{resp | status: status}
-        {:headers, ^ref, headers}, resp -> %{resp | headers: headers}
-        {:data, ^ref, data}, resp -> %{resp | data: data}
-        {:done, ^ref}, resp -> resp
-      end)
+  defp build_response(responses, ref, response \\ %{})
 
-    case Mint.WebSocket.new(conn, ref, resp.status, resp.headers) do
-      {:ok, conn, websocket} ->
-        {:ok, %{c | conn: conn, websocket: websocket}, []}
+  defp build_response([{key, ref, val} | rest], ref, response) do
+    build_response(rest, ref, Map.put(response, key, val))
+  end
 
-      {:error, conn, error} ->
-        Mint.HTTP.close(conn)
-        {:error, error}
+  defp build_response([{:done, ref}], ref, response), do: response
+  defp build_response([], _ref, response), do: response
+
+  # WebSocket frames
+  defp handle_response(%{data: data} = response, %{websocket: websocket} = c)
+       when websocket != nil do
+    case Mint.WebSocket.decode(websocket, data) do
+      {:ok, websocket, frames} ->
+        {:ok, %{c | websocket: websocket}, Map.put(response, :frames, frames)}
+
+      {:error, websocket, error} ->
+        {:error, %{c | websocket: websocket}, error}
     end
   end
 
-  # websocket frames
-  defp handle_responses(%{request_ref: ref} = c, [{:data, ref, data}]) do
-    case Mint.WebSocket.decode(c.websocket, data) do
-      {:ok, websocket, frames} ->
-        {:ok, %{c | websocket: websocket}, frames}
+  # upgrade response
+  defp handle_response(%{status: status, headers: headers} = response, c) do
+    case Mint.WebSocket.new(c.conn, c.request_ref, status, headers) do
+      {:ok, conn, websocket} ->
+        c = %{c | conn: conn, websocket: websocket}
 
-      {:error, _websocket, error} ->
-        Mint.HTTP.close(c.conn)
-        {:error, error}
+        case response do
+          %{data: _} -> handle_response(response, c)
+          _no_frames -> {:ok, c, response}
+        end
+
+      {:error, conn, error} ->
+        {:error, %{c | conn: conn}, error}
     end
   end
 end
