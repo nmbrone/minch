@@ -79,10 +79,6 @@ defmodule Minch do
         }
       end
 
-      def start_link(init_arg) do
-        Minch.start_link(__MODULE__, init_arg, name: __MODULE__)
-      end
-
       def init(init_arg) do
         {:connect, init_arg}
       end
@@ -96,7 +92,6 @@ defmodule Minch do
       end
 
       defoverridable child_spec: 1,
-                     start_link: 1,
                      init: 1,
                      terminate: 2,
                      handle_info: 2

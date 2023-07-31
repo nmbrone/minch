@@ -37,6 +37,10 @@ defmodule MinchTest do
   defmodule Client do
     use Minch
 
+    def start_link(state) do
+      Minch.start_link(__MODULE__, state, name: __MODULE__)
+    end
+
     def connect(state) do
       state.url
     end
