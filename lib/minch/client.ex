@@ -41,7 +41,7 @@ defmodule Minch.Client do
   end
 
   @impl true
-  def handle_continue(:connect, state) do
+  def handle_continue(:connect, %{conn: nil} = state) do
     {url, headers, options} =
       case state.callback.connect(state.callback_state) do
         {url, headers, options} -> {url, headers, options}
@@ -56,6 +56,10 @@ defmodule Minch.Client do
       {:error, error} ->
         {:noreply, handle_disconnect(state, error)}
     end
+  end
+
+  def handle_continue(:connect, state) do
+    {:noreply, state}
   end
 
   @impl true

@@ -87,7 +87,7 @@ case Minch.connect(url, headers, options) do
   {:ok, pid, ref} ->
     Minch.send_frame(pid, {:text, to_string(System.monotonic_time())})
 
-    case Minch.await_frame(ref) do
+    case Minch.receive_frame(ref, 5000) do
       {:text, start} ->
         ping =
           System.convert_time_unit(

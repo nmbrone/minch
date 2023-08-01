@@ -1,6 +1,24 @@
 defmodule Minch.Conn do
   @moduledoc false
 
+  defmodule NotUpgradedError do
+    @type t :: %__MODULE__{
+            message: String.t()
+          }
+
+    defstruct message: "connection is not upgraded to WebSocket"
+  end
+
+  defmodule UpgradeFailureError do
+    @type t :: %__MODULE__{
+            status: Mint.Types.status(),
+            headers: Mint.Types.headers(),
+            body: binary() | nil
+          }
+
+    defstruct [:status, :headers, :body]
+  end
+
   @type t :: %__MODULE__{
           conn: Mint.HTTP.t(),
           request_ref: Mint.Types.request_ref(),
@@ -67,7 +85,7 @@ defmodule Minch.Conn do
   @spec close(t()) :: t()
   def close(c) do
     if Mint.HTTP.open?(c.conn) do
-      unless is_nil(c.websocket), do: send_frame(c, :close)
+      send_frame(c, :close)
       {:ok, conn} = Mint.HTTP.close(c.conn)
       %{c | conn: conn}
     else
@@ -76,7 +94,7 @@ defmodule Minch.Conn do
   end
 
   @spec send_frame(t(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
-          {:ok, t()} | {:error, t(), term()}
+          {:ok, t()} | {:error, t(), NotUpgradedError.t() | Mint.Types.error() | term()}
   def send_frame(%{websocket: websocket} = c, frame) when websocket != nil do
     case Mint.WebSocket.encode(websocket, frame) do
       {:ok, websocket, data} ->
@@ -93,9 +111,13 @@ defmodule Minch.Conn do
     end
   end
 
+  def send_frame(c, _) do
+    {:error, c, %NotUpgradedError{}}
+  end
+
   @spec stream(t(), term()) ::
           {:ok, t(), response()}
-          | {:error, t(), Mint.WebSocket.error()}
+          | {:error, t(), Mint.Types.error() | Mint.WebSocketError.t() | UpgradeFailureError.t()}
           | :unknown
   def stream(c, http_reply) do
     case Mint.WebSocket.stream(c.conn, http_reply) do
@@ -143,6 +165,10 @@ defmodule Minch.Conn do
           %{data: _} -> handle_response(response, c)
           _no_frames -> {:ok, c, response}
         end
+
+      {:error, conn, %Mint.WebSocket.UpgradeFailureError{}} ->
+        {:error, %{c | conn: conn},
+         %UpgradeFailureError{status: status, headers: headers, body: response[:data]}}
 
       {:error, conn, error} ->
         {:error, %{c | conn: conn}, error}
