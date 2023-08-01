@@ -168,7 +168,7 @@ defmodule Minch do
       end
 
       def handle_info(_message, state) do
-        {:noreply, state}
+        {:ok, state}
       end
 
       defoverridable child_spec: 1,
