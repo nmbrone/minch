@@ -1,5 +1,7 @@
 defmodule Minch.Conn do
-  @moduledoc false
+  @moduledoc """
+  Minch WebSocket connection.
+  """
 
   defmodule NotUpgradedError do
     @type t :: %__MODULE__{
@@ -35,11 +37,11 @@ defmodule Minch.Conn do
           optional(:frames) => [Mint.WebSocket.frame()]
         }
 
-  @spec open?(t()) :: boolean()
-  def open?(c) do
-    Mint.HTTP.open?(c.conn)
-  end
+  @doc """
+  Opens a new connection.
 
+  For the available options see `Mint.HTTP.connect/4` and `Mint.WebSocket.upgrade/5` functions.
+  """
   @spec open(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
           {:ok, t()} | {:error, Mint.WebSocket.error()}
   def open(url, headers \\ [], options \\ []) do
@@ -82,17 +84,30 @@ defmodule Minch.Conn do
     end
   end
 
+  @doc """
+  Gracefully closes the connection if it's still open.
+  """
   @spec close(t()) :: t()
-  def close(c) do
-    if Mint.HTTP.open?(c.conn) do
+  def close(%{conn: conn} = c) do
+    if Mint.HTTP.open?(conn) do
       send_frame(c, :close)
-      {:ok, conn} = Mint.HTTP.close(c.conn)
+      {:ok, conn} = Mint.HTTP.close(conn)
       %{c | conn: conn}
     else
       c
     end
   end
 
+  @doc """
+  Wraps `Mint.HTTP.open?/2`.
+  """
+  def open?(c, type \\ :read_write) do
+    Mint.HTTP.open?(c.conn, type)
+  end
+
+  @doc """
+  Send a frame via the connection.
+  """
   @spec send_frame(t(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
           {:ok, t()} | {:error, t(), NotUpgradedError.t() | Mint.Types.error() | term()}
   def send_frame(%{websocket: websocket} = c, frame) when websocket != nil do
@@ -115,6 +130,9 @@ defmodule Minch.Conn do
     {:error, c, %NotUpgradedError{}}
   end
 
+  @doc """
+  Wraps `Mint.WebSocket.stream/2` and decodes WebSocket frames.
+  """
   @spec stream(t(), term()) ::
           {:ok, t(), response()}
           | {:error, t(), Mint.Types.error() | Mint.WebSocketError.t() | UpgradeFailureError.t()}
