@@ -67,7 +67,7 @@ defmodule MinchTest do
 
     def handle_info(message, state) do
       send(state.receiver, {:ws_client_info, message})
-      {:noreply, state}
+      {:ok, state}
     end
 
     def handle_frame(frame, state) do

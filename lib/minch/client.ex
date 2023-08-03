@@ -143,7 +143,7 @@ defmodule Minch.Client do
 
   defp do_handle_info(message, state) do
     case state.callback.handle_info(message, state.callback_state) do
-      {:noreply, callback_state} ->
+      {:ok, callback_state} ->
         {:noreply, %{state | callback_state: callback_state}}
 
       {:reply, frame, callback_state} ->
