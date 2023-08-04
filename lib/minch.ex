@@ -128,7 +128,8 @@ defmodule Minch do
   @doc """
   Sends a WebSocket frame.
   """
-  @spec send_frame(client(), Mint.WebSocket.frame()) :: :ok | {:error, Mint.WebSocket.error()}
+  @spec send_frame(client(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
+          :ok | {:error, Mint.WebSocket.error()}
   def send_frame(client, frame) do
     GenServer.call(client, {:send_frame, frame})
   end
