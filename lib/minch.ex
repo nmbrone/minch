@@ -90,15 +90,14 @@ defmodule Minch do
   @doc """
   Connects to a WebSocket server.
 
-  Once connected, the function will return the pid and the request reference of the connection.
+  Once connected, the function will return the connection's PID and the request reference.
 
-  You can then use the connection pid to send frames to the server via the `send_frame/2` function.
+  Use the `send_frame/2` function to send WebSocket frames to the server.
 
-  An incoming WebSocket frame will be send to the caller process mailbox as a tuple
-  `{:frame, request_ref, frame}`. You can also use `receive_frame/2` helper receive frames.
+  Incoming WebSocket frames will be sent to the caller's mailbox as a tuple `{:frame, request_ref, frame}`.
+  You can use the `receive_frame/2` function to receive frames these frames.
 
-  To get notified when the connection is closed by the server, you should monitor the connection
-  pid with `Process.monitor/1`.
+  Use `Process.monitor/1` to get notified when the connection is closed by the server.
 
   ## Example
 
