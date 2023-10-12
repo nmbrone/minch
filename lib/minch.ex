@@ -95,7 +95,7 @@ defmodule Minch do
   Use the `send_frame/2` function to send WebSocket frames to the server.
 
   Incoming WebSocket frames will be sent to the caller's mailbox as a tuple `{:frame, request_ref, frame}`.
-  You can use the `receive_frame/2` function to receive frames these frames.
+  You can use the `receive_frame/2` function to receive these frames.
 
   Use `Process.monitor/1` to get notified when the connection is closed by the server.
 
