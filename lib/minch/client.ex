@@ -1,6 +1,8 @@
 defmodule Minch.Client do
   @moduledoc false
 
+  alias Minch.Conn
+
   require Logger
 
   defmodule State do
@@ -24,7 +26,7 @@ defmodule Minch.Client do
 
   @impl true
   def terminate(reason, %{conn: conn} = state) do
-    unless is_nil(conn), do: Minch.Conn.close(state.conn)
+    if not is_nil(conn), do: Conn.close(conn)
     state.callback.terminate(reason, state.callback_state)
     :ok
   end
@@ -49,7 +51,7 @@ defmodule Minch.Client do
         url -> {url, [], []}
       end
 
-    case Minch.Conn.open(url, headers, options) do
+    case Conn.open(url, headers, options) do
       {:ok, conn} ->
         {:noreply, %{state | conn: conn}}
 
@@ -72,7 +74,7 @@ defmodule Minch.Client do
   end
 
   def handle_info(message, state) do
-    case Minch.Conn.stream(state.conn, message) do
+    case Conn.stream(state.conn, message) do
       {:ok, conn, %{frames: frames}} ->
         {:noreply, Enum.reduce(frames, %{state | conn: conn}, &handle_frame/2)}
 
@@ -80,7 +82,7 @@ defmodule Minch.Client do
         {:noreply, handle_connect(response, %{state | conn: conn})}
 
       {:error, conn, error} ->
-        Minch.Conn.close(conn)
+        Conn.close(conn)
         {:noreply, handle_disconnect(%{state | conn: nil}, error)}
 
       :unknown ->
@@ -140,7 +142,7 @@ defmodule Minch.Client do
   end
 
   defp send_frame(state, frame) do
-    case Minch.Conn.send_frame(state.conn, frame) do
+    case Conn.send_frame(state.conn, frame) do
       {:ok, conn} -> {:ok, %{state | conn: conn}}
       {:error, conn, error} -> {:error, %{state | conn: conn}, error}
     end

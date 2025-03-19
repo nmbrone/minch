@@ -1,6 +1,8 @@
 defmodule Minch.SimpleClient do
   @moduledoc false
 
+  alias Minch.Conn
+
   use GenServer
 
   defmodule State do
@@ -28,14 +30,14 @@ defmodule Minch.SimpleClient do
   end
 
   @impl true
-  def terminate(_reason, state) do
-    unless is_nil(state.conn), do: Minch.Conn.close(state.conn)
+  def terminate(_reason, %{conn: conn}) do
+    if not is_nil(conn), do: Conn.close(conn)
     :ok
   end
 
   @impl true
   def handle_call({:send_frame, frame}, _from, state) do
-    case Minch.Conn.send_frame(state.conn, frame) do
+    case Conn.send_frame(state.conn, frame) do
       {:ok, conn} ->
         {:reply, :ok, %{state | conn: conn}}
 
@@ -45,7 +47,7 @@ defmodule Minch.SimpleClient do
   end
 
   def handle_call({:connect, url, headers, options}, from, state) do
-    case Minch.Conn.open(url, headers, options) do
+    case Conn.open(url, headers, options) do
       {:ok, conn} ->
         {:noreply, %{state | conn: conn, caller: from}}
 
@@ -61,7 +63,7 @@ defmodule Minch.SimpleClient do
   end
 
   def handle_info(message, state) do
-    case Minch.Conn.stream(state.conn, message) do
+    case Conn.stream(state.conn, message) do
       {:ok, conn, response} ->
         {:noreply, %{state | conn: conn} |> handle_connect(response) |> handle_frames(response)}
 
