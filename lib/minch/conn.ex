@@ -100,23 +100,26 @@ defmodule Minch.Conn do
   @spec close(t()) :: t()
   def close(conn)
 
-  def close(%{conn: conn} = c) do
+  def close(%{conn: conn} = state) do
     if Mint.HTTP.open?(conn) do
-      send_frame(c, :close)
+      send_frame(state, :close)
       {:ok, conn} = Mint.HTTP.close(conn)
-      %{c | conn: conn}
+      %{state | conn: conn}
     else
-      c
+      state
     end
   end
 
   @doc """
-  Wraps `Mint.HTTP.open?/2`.
+  Checks whether the connection is open.
+
+  See `Mint.HTTP.open?/2`.
   """
+  @spec open?(t(), :read | :write) :: boolean()
   def open?(conn, type \\ :write)
 
-  def open?(c, type) do
-    Mint.HTTP.open?(c.conn, type)
+  def open?(state, type) do
+    Mint.HTTP.open?(state.conn, type)
   end
 
   @doc """
@@ -126,24 +129,24 @@ defmodule Minch.Conn do
           {:ok, t()} | {:error, t(), NotUpgradedError.t() | Mint.Types.error() | term()}
   def send_frame(conn, frame)
 
-  def send_frame(%{websocket: websocket} = c, frame) when websocket != nil do
+  def send_frame(%{websocket: websocket} = state, frame) when websocket != nil do
     case Mint.WebSocket.encode(websocket, frame) do
       {:ok, websocket, data} ->
-        case Mint.WebSocket.stream_request_body(c.conn, c.request_ref, data) do
+        case Mint.WebSocket.stream_request_body(state.conn, state.request_ref, data) do
           {:ok, conn} ->
-            {:ok, %{c | conn: conn, websocket: websocket}}
+            {:ok, %{state | conn: conn, websocket: websocket}}
 
           {:error, conn, error} ->
-            {:error, %{c | conn: conn, websocket: websocket}, error}
+            {:error, %{state | conn: conn, websocket: websocket}, error}
         end
 
       {:error, websocket, error} ->
-        {:error, %{c | websocket: websocket}, error}
+        {:error, %{state | websocket: websocket}, error}
     end
   end
 
-  def send_frame(c, _) do
-    {:error, c, %NotUpgradedError{}}
+  def send_frame(conn, _) do
+    {:error, conn, %NotUpgradedError{}}
   end
 
   @doc """
@@ -155,15 +158,15 @@ defmodule Minch.Conn do
           | :unknown
   def stream(conn, http_reply)
 
-  def stream(c, http_reply) do
-    case Mint.WebSocket.stream(c.conn, http_reply) do
+  def stream(state, http_reply) do
+    case Mint.WebSocket.stream(state.conn, http_reply) do
       {:ok, conn, responses} ->
         responses
-        |> build_response(c.request_ref)
-        |> handle_response(%{c | conn: conn})
+        |> build_response(state.request_ref)
+        |> handle_response(%{state | conn: conn})
 
       {:error, conn, error, _responses} ->
-        {:error, %{c | conn: conn}, error}
+        {:error, %{state | conn: conn}, error}
 
       :unknown ->
         :unknown
@@ -180,34 +183,34 @@ defmodule Minch.Conn do
   defp build_response([], _ref, response), do: response
 
   # WebSocket frames
-  defp handle_response(%{data: data} = response, %{websocket: websocket} = c)
+  defp handle_response(%{data: data} = response, %{websocket: websocket} = state)
        when websocket != nil do
     case Mint.WebSocket.decode(websocket, data) do
       {:ok, websocket, frames} ->
-        {:ok, %{c | websocket: websocket}, Map.put(response, :frames, frames)}
+        {:ok, %{state | websocket: websocket}, Map.put(response, :frames, frames)}
 
       {:error, websocket, error} ->
-        {:error, %{c | websocket: websocket}, error}
+        {:error, %{state | websocket: websocket}, error}
     end
   end
 
   # upgrade response
-  defp handle_response(%{status: status, headers: headers} = response, c) do
-    case Mint.WebSocket.new(c.conn, c.request_ref, status, headers) do
+  defp handle_response(%{status: status, headers: headers} = response, state) do
+    case Mint.WebSocket.new(state.conn, state.request_ref, status, headers) do
       {:ok, conn, websocket} ->
-        c = %{c | conn: conn, websocket: websocket}
+        state = %{state | conn: conn, websocket: websocket}
 
         case response do
-          %{data: _} -> handle_response(response, c)
-          _no_frames -> {:ok, c, response}
+          %{data: _} -> handle_response(response, state)
+          _no_frames -> {:ok, state, response}
         end
 
       {:error, conn, %Mint.WebSocket.UpgradeFailureError{}} ->
-        {:error, %{c | conn: conn},
+        {:error, %{state | conn: conn},
          %UpgradeFailureError{status: status, headers: headers, body: response[:data]}}
 
       {:error, conn, error} ->
-        {:error, %{c | conn: conn}, error}
+        {:error, %{state | conn: conn}, error}
     end
   end
 end
