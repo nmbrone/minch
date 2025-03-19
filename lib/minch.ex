@@ -9,6 +9,7 @@ defmodule Minch do
                 |> List.last())
 
   @type client :: GenServer.server()
+  @type response_map :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
 
   @doc """
   Invoked when the client process is started.
@@ -38,7 +39,7 @@ defmodule Minch do
   @doc """
   Invoked to handle a successful connection.
   """
-  @callback handle_connect(state :: term()) ::
+  @callback handle_connect(response :: response_map(), state :: term()) ::
               {:ok, new_state}
               | {:reply, frame :: Mint.WebSocket.frame(), new_state}
             when new_state: term()
