@@ -7,10 +7,12 @@ defmodule Minch.Client do
 
   defmodule State do
     @moduledoc false
-    defstruct [:conn, :callback, :callback_state, :timer]
+    defstruct [:conn, :callback, :callback_state, :timer_ref]
   end
 
   use GenServer
+
+  @prefix :"$minch"
 
   @spec start_link(module(), any(), GenServer.options()) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
@@ -56,7 +58,7 @@ defmodule Minch.Client do
         {:noreply, %{state | conn: conn}}
 
       {:error, error} ->
-        {:noreply, handle_disconnect(state, error)}
+        {:noreply, callback_handle_disconnect(error, state)}
     end
   end
 
@@ -65,76 +67,80 @@ defmodule Minch.Client do
   end
 
   @impl true
-  def handle_info({:"$minch", :reconnect}, state) do
-    {:noreply, %{state | timer: nil}, {:continue, :connect}}
+  def handle_info({@prefix, :reconnect}, state) do
+    if ref = state.timer_ref, do: Process.cancel_timer(ref)
+    {:noreply, %{state | timer_ref: nil}, {:continue, :connect}}
   end
 
   def handle_info(message, %{conn: nil} = state) do
-    do_handle_info(message, state)
+    {:noreply, callback_handle_info(message, state)}
   end
 
   def handle_info(message, state) do
     case Conn.stream(state.conn, message) do
-      {:ok, conn, %{frames: frames}} ->
-        {:noreply, Enum.reduce(frames, %{state | conn: conn}, &handle_frame/2)}
-
       {:ok, conn, response} ->
-        {:noreply, handle_connect(response, %{state | conn: conn})}
+        state = %{state | conn: conn}
+        state = callback_handle_connect(response, state)
+        state = callback_handle_frames(response, state)
+        {:noreply, state}
 
       {:error, conn, error} ->
         Conn.close(conn)
-        {:noreply, handle_disconnect(%{state | conn: nil}, error)}
+        {:noreply, callback_handle_disconnect(error, %{state | conn: nil})}
 
       :unknown ->
-        do_handle_info(message, state)
+        {:noreply, callback_handle_info(message, state)}
     end
   end
 
-  defp handle_frame(frame, state) do
-    case state.callback.handle_frame(frame, state.callback_state) do
-      {:ok, callback_state} ->
-        %{state | callback_state: callback_state}
-
-      {:reply, frame, callback_state} ->
-        {:ok, state} = send_reply(state, frame)
-        %{state | callback_state: callback_state}
-    end
+  defp callback_handle_connect(%{status: _} = response, state) do
+    response
+    |> state.callback.handle_connect(state.callback_state)
+    |> handle_callback_result(state)
   end
 
-  defp handle_connect(response, state) do
-    case state.callback.handle_connect(response, state.callback_state) do
-      {:ok, callback_state} ->
-        %{state | callback_state: callback_state}
+  defp callback_handle_connect(_response, state), do: state
 
-      {:reply, frame, callback_state} ->
-        {:ok, state} = send_reply(state, frame)
-        %{state | callback_state: callback_state}
-    end
+  defp callback_handle_frames(%{frames: frames}, state) do
+    Enum.reduce(frames, state, &callback_handle_frame/2)
   end
 
-  defp handle_disconnect(state, error) do
-    case state.callback.handle_disconnect(error, state.callback_state) do
-      {:reconnect, backoff, callback_state} ->
-        timer = Process.send_after(self(), {:"$minch", :reconnect}, backoff)
-        %{state | callback_state: callback_state, timer: timer}
+  defp callback_handle_frames(_response, state), do: state
 
-      {:ok, callback_state} ->
-        %{state | callback_state: callback_state}
-    end
+  defp callback_handle_frame(frame, state) do
+    frame
+    |> state.callback.handle_frame(state.callback_state)
+    |> handle_callback_result(state)
   end
 
-  defp do_handle_info(message, state) do
-    case state.callback.handle_info(message, state.callback_state) do
-      {:ok, callback_state} ->
-        {:noreply, %{state | callback_state: callback_state}}
+  defp callback_handle_info(message, state) do
+    message
+    |> state.callback.handle_info(state.callback_state)
+    |> handle_callback_result(state)
+  end
 
-      {:reply, frame, callback_state} ->
-        {:ok, state} = send_reply(state, frame)
-        {:noreply, %{state | callback_state: callback_state}}
+  defp callback_handle_disconnect(error, state) do
+    error
+    |> state.callback.handle_disconnect(state.callback_state)
+    |> handle_callback_result(state)
+  end
 
-      {:reconnect, callback_state} ->
-        {:noreply, %{state | callback_state: callback_state}, {:continue, :connect}}
-    end
+  defp handle_callback_result({:ok, callback_state}, state) do
+    %{state | callback_state: callback_state}
+  end
+
+  defp handle_callback_result({:reply, frame, callback_state}, state) do
+    %{state | callback_state: callback_state} |> send_reply(frame)
+  end
+
+  defp handle_callback_result({:reconnect, callback_state}, state) do
+    send(self(), {@prefix, :reconnect})
+    %{state | callback_state: callback_state}
+  end
+
+  defp handle_callback_result({:reconnect, timeout, callback_state}, state) do
+    timer_ref = Process.send_after(self(), {@prefix, :reconnect}, timeout)
+    %{state | callback_state: callback_state, timer_ref: timer_ref}
   end
 
   defp send_frame(%{conn: nil} = state, _frame) do
@@ -151,11 +157,11 @@ defmodule Minch.Client do
   defp send_reply(state, frame) do
     case send_frame(state, frame) do
       {:ok, state} ->
-        {:ok, state}
+        state
 
       {:error, state, error} ->
-        Logger.error(inspect(error))
-        {:ok, state}
+        Logger.error("Minch failed to send the frame due to the error #{inspect(error)}")
+        state
     end
   end
 end
