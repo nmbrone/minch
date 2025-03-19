@@ -113,7 +113,7 @@ defmodule Minch.Conn do
   @doc """
   Wraps `Mint.HTTP.open?/2`.
   """
-  def open?(conn, type \\ :read_write)
+  def open?(conn, type \\ :write)
 
   def open?(c, type) do
     Mint.HTTP.open?(c.conn, type)

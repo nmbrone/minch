@@ -12,8 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        otp: ['25.3.2.4', '26.0.2']
-        elixir: ['1.15.4']
+        otp:
+          - "26.2.5.9"
+          - "27.3"
+        elixir:
+          - "1.18.3"
 
     steps:
       - name: Checkout
@@ -36,26 +39,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-
 
-      - name: Get deps
-        if: steps.mix-cache.outputs.cache-hit != 'true'
+      - name: Fetch dependencies
         run: mix deps.get
 
-      - name: Compile deps
-        if: steps.mix-cache.outputs.cache-hit != 'true'
-        run: mix deps.compile
+      - name: Check retired dependencies
+        run: mix hex.audit
 
-      # - name: Build Dialyzer PLT(s)
-      #   if: steps.mix-cache.outputs.cache-hit != 'true'
-      #   run: mix dialyzer --plt
+      - name: Check unused dependencies
+        run: mix deps.unlock --check-unused
 
-      - name: Mix compile
-        run: mix compile --force --warnings-as-errors
-
-      - name: Mix format
+      - name: Check code formatting
         run: mix format --check-formatted
 
-      # - name: Dialyzer
-      #   run: mix dialyzer --no-check
+      - name: Compile code
+        run: mix compile --all-warnings --warnings-as-errors
 
-      - name: Mix test
+      - name: Run Dialyzer
+        run: mix dialyzer --format github
+
+      - name: Run tests
         run: mix test
