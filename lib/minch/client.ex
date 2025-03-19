@@ -14,9 +14,20 @@ defmodule Minch.Client do
 
   @prefix :"$minch"
 
-  @spec start_link(module(), any(), GenServer.options()) :: GenServer.on_start()
+  @spec send_frame(GenServer.server(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
+          :ok | {:error, Mint.WebSocket.error() | :not_connected}
+  def send_frame(client, frame) do
+    GenServer.call(client, {@prefix, :send_frame, frame})
+  end
+
+  @spec start_link(module(), term(), GenServer.options()) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
     GenServer.start_link(__MODULE__, {module, init_arg}, opts)
+  end
+
+  @spec start(module(), term(), GenServer.options()) :: GenServer.on_start()
+  def start(module, init_arg, opts \\ []) do
+    GenServer.start(__MODULE__, {module, init_arg}, opts)
   end
 
   @impl true
@@ -34,8 +45,8 @@ defmodule Minch.Client do
   end
 
   @impl true
-  def handle_call({:send_frame, frame}, _from, state) do
-    case send_frame(state, frame) do
+  def handle_call({@prefix, :send_frame, frame}, _from, state) do
+    case do_send_frame(state, frame) do
       {:ok, state} ->
         {:reply, :ok, state}
 
@@ -81,16 +92,41 @@ defmodule Minch.Client do
       {:ok, conn, response} ->
         state = %{state | conn: conn}
         state = callback_handle_connect(response, state)
-        state = callback_handle_frames(response, state)
+        state = handle_frames(response, state)
         {:noreply, state}
 
-      {:error, conn, error} ->
+      {:error, conn, error, _response} ->
         Conn.close(conn)
         {:noreply, callback_handle_disconnect(error, %{state | conn: nil})}
 
       :unknown ->
         {:noreply, callback_handle_info(message, state)}
     end
+  end
+
+  defp handle_frames(%{frames: frames}, state) do
+    Enum.reduce(frames, state, &handle_frame/2)
+  end
+
+  defp handle_frames(_response, state), do: state
+
+  defp handle_frame({:close, _, _} = frame, state) do
+    Conn.close(state.conn)
+    callback_handle_disconnect(frame, %{state | conn: nil})
+  end
+
+  defp handle_frame({:ping, data}, state) do
+    reply(state, {:pong, data})
+  end
+
+  defp handle_frame(frame, state) do
+    callback_handle_frame(frame, state)
+  end
+
+  defp callback_handle_frame(frame, state) do
+    frame
+    |> state.callback.handle_frame(state.callback_state)
+    |> handle_callback_result(state)
   end
 
   defp callback_handle_connect(%{status: _} = response, state) do
@@ -100,18 +136,6 @@ defmodule Minch.Client do
   end
 
   defp callback_handle_connect(_response, state), do: state
-
-  defp callback_handle_frames(%{frames: frames}, state) do
-    Enum.reduce(frames, state, &callback_handle_frame/2)
-  end
-
-  defp callback_handle_frames(_response, state), do: state
-
-  defp callback_handle_frame(frame, state) do
-    frame
-    |> state.callback.handle_frame(state.callback_state)
-    |> handle_callback_result(state)
-  end
 
   defp callback_handle_info(message, state) do
     message
@@ -130,7 +154,7 @@ defmodule Minch.Client do
   end
 
   defp handle_callback_result({:reply, frame, callback_state}, state) do
-    %{state | callback_state: callback_state} |> send_reply(frame)
+    %{state | callback_state: callback_state} |> reply(frame)
   end
 
   defp handle_callback_result({:reconnect, callback_state}, state) do
@@ -143,19 +167,19 @@ defmodule Minch.Client do
     %{state | callback_state: callback_state, timer_ref: timer_ref}
   end
 
-  defp send_frame(%{conn: nil} = state, _frame) do
-    {:error, state, %Mint.TransportError{reason: :closed}}
+  defp do_send_frame(%{conn: nil} = state, _frame) do
+    {:error, state, :not_connected}
   end
 
-  defp send_frame(state, frame) do
+  defp do_send_frame(state, frame) do
     case Conn.send_frame(state.conn, frame) do
       {:ok, conn} -> {:ok, %{state | conn: conn}}
       {:error, conn, error} -> {:error, %{state | conn: conn}, error}
     end
   end
 
-  defp send_reply(state, frame) do
-    case send_frame(state, frame) do
+  defp reply(state, frame) do
+    case do_send_frame(state, frame) do
       {:ok, state} ->
         state
 
