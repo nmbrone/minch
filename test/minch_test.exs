@@ -55,8 +55,8 @@ defmodule MinchTest do
       :ok
     end
 
-    def handle_connect(state) do
-      send(state.receiver, {:ws_client_connect, state})
+    def handle_connect(response, state) do
+      send(state.receiver, {:ws_client_connect, response})
       {:reply, :ping, state}
     end
 
@@ -99,7 +99,7 @@ defmodule MinchTest do
       assert_receive {:ws_client_init, _}
 
       # handle_connect
-      assert_receive {:ws_client_connect, _}
+      assert_receive {:ws_client_connect, %{status: 101, headers: _}}
 
       # reply from handle_connect
       assert_receive {:ws_server_frame, :ping}

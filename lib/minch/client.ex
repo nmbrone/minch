@@ -73,8 +73,11 @@ defmodule Minch.Client do
 
   def handle_info(message, state) do
     case Minch.Conn.stream(state.conn, message) do
+      {:ok, conn, %{frames: frames}} ->
+        {:noreply, Enum.reduce(frames, %{state | conn: conn}, &handle_frame/2)}
+
       {:ok, conn, response} ->
-        {:noreply, %{state | conn: conn} |> handle_connect(response) |> handle_frames(response)}
+        {:noreply, handle_connect(response, %{state | conn: conn})}
 
       {:error, conn, error} ->
         Minch.Conn.close(conn)
@@ -84,16 +87,6 @@ defmodule Minch.Client do
         do_handle_info(message, state)
     end
   end
-
-  defp handle_frames(state, %{frames: frames}) do
-    handle_frames(state, frames)
-  end
-
-  defp handle_frames(state, [frame | rest]) do
-    frame |> handle_frame(state) |> handle_frames(rest)
-  end
-
-  defp handle_frames(state, _), do: state
 
   defp handle_frame(frame, state) do
     case state.callback.handle_frame(frame, state.callback_state) do
@@ -106,19 +99,8 @@ defmodule Minch.Client do
     end
   end
 
-  defp send_frame(%{conn: nil} = state, _frame) do
-    {:error, state, %Mint.TransportError{reason: :closed}}
-  end
-
-  defp send_frame(state, frame) do
-    case Minch.Conn.send_frame(state.conn, frame) do
-      {:ok, conn} -> {:ok, %{state | conn: conn}}
-      {:error, conn, error} -> {:error, %{state | conn: conn}, error}
-    end
-  end
-
-  defp handle_connect(state, %{status: _}) do
-    case state.callback.handle_connect(state.callback_state) do
+  defp handle_connect(response, state) do
+    case state.callback.handle_connect(response, state.callback_state) do
       {:ok, callback_state} ->
         %{state | callback_state: callback_state}
 
@@ -127,8 +109,6 @@ defmodule Minch.Client do
         %{state | callback_state: callback_state}
     end
   end
-
-  defp handle_connect(state, _response), do: state
 
   defp handle_disconnect(state, error) do
     case state.callback.handle_disconnect(error, state.callback_state) do
@@ -152,6 +132,17 @@ defmodule Minch.Client do
 
       {:reconnect, callback_state} ->
         {:noreply, %{state | callback_state: callback_state}, {:continue, :connect}}
+    end
+  end
+
+  defp send_frame(%{conn: nil} = state, _frame) do
+    {:error, state, %Mint.TransportError{reason: :closed}}
+  end
+
+  defp send_frame(state, frame) do
+    case Minch.Conn.send_frame(state.conn, frame) do
+      {:ok, conn} -> {:ok, %{state | conn: conn}}
+      {:error, conn, error} -> {:error, %{state | conn: conn}, error}
     end
   end
 
