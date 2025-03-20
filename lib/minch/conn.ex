@@ -152,9 +152,8 @@ defmodule Minch.Conn do
   Wraps `Mint.WebSocket.stream/2` and decodes WebSocket frames.
   """
   @spec stream(t(), term()) ::
-          {:ok, t(), response()}
-          | {:error, t(), Mint.Types.error() | Mint.WebSocketError.t() | UpgradeFailureError.t()}
-          | :unknown
+          {:ok, t(), response()} | {:error, t(), error, response()} | :unknown
+        when error: Mint.Types.error() | Mint.WebSocketError.t() | UpgradeFailureError.t()
   def stream(state, http_reply) do
     case Mint.WebSocket.stream(state.conn, http_reply) do
       {:ok, conn, responses} ->
@@ -162,8 +161,8 @@ defmodule Minch.Conn do
         |> build_response(state.request_ref)
         |> handle_response(%{state | conn: conn})
 
-      {:error, conn, error, _responses} ->
-        {:error, %{state | conn: conn}, error}
+      {:error, conn, error, responses} ->
+        {:error, %{state | conn: conn}, error, build_response(responses, state.request_ref)}
 
       :unknown ->
         :unknown

@@ -30,7 +30,7 @@ defmodule Minch do
   @doc """
   Invoked to handle all other messages.
   """
-  @callback handle_info(msg :: :timeout | term(), state :: term()) ::
+  @callback handle_info(msg :: term(), state :: term()) ::
               {:ok, new_state}
               | {:reply, frame :: Mint.WebSocket.frame(), new_state}
               | {:reconnect, new_state}
@@ -114,7 +114,7 @@ defmodule Minch do
   @spec connect(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
           {:ok, pid(), Mint.Types.request_ref()} | {:error, Mint.WebSocket.error()}
   def connect(url, headers \\ [], options \\ []) do
-    Minch.SimpleClient.connect(url, headers, options)
+    Minch.SimpleClient.start(url, headers, options)
   end
 
   @doc """
@@ -129,9 +129,9 @@ defmodule Minch do
   Sends a WebSocket frame.
   """
   @spec send_frame(client(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
-          :ok | {:error, Mint.WebSocket.error()}
+          :ok | {:error, Mint.WebSocket.error() | :not_connected}
   def send_frame(client, frame) do
-    GenServer.call(client, {:send_frame, frame})
+    Minch.Client.send_frame(client, frame)
   end
 
   @doc """
@@ -148,16 +148,18 @@ defmodule Minch do
     end
   end
 
-  defmacro __using__(_) do
-    quote do
+  defmacro __using__(opts) do
+    quote location: :keep do
       @behaviour Minch
 
-      def child_spec(init_arg) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [init_arg]},
-          restart: :transient
-        }
+      def child_spec(start_opts) do
+        Supervisor.child_spec(
+          %{
+            id: __MODULE__,
+            start: {__MODULE__, :start_link, [start_opts]}
+          },
+          unquote(Macro.escape(opts))
+        )
       end
 
       def init(_init_arg) do
