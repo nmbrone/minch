@@ -1,12 +1,8 @@
 defmodule Minch do
   @external_resource "README.md"
-  @moduledoc """
-  A WebSocket client build on top of `Mint.WebSocket`.
-  """
-  @moduledoc @moduledoc <>
-               (File.read!(@external_resource)
-                |> String.split("<!-- @moduledoc -->")
-                |> List.last())
+  @moduledoc File.read!(@external_resource)
+             |> String.split("<!-- @moduledoc -->")
+             |> List.last()
 
   @type client :: GenServer.server()
   @type response_map :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}

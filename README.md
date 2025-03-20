@@ -4,6 +4,17 @@
 
 A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
 
+<!-- @moduledoc -->
+
+A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
+
+## Fetures
+
+- **Reconnects with backoff**
+- **Handles control frames automatically**
+  - closes the connection after receiving the `:close` frame and invokes the `c:handle_disconnect/2` callback
+  - replies to server `:ping` frames with `:pong` frames _(you'll have to handle incoming `:pong` frames if you ping the server)_
+
 ## Installation
 
 The package can be installed by adding `minch` to your list of dependencies in `mix.exs`:
@@ -19,14 +30,6 @@ end
 ```
 
 <!-- x-release-please-end -->
-
-<!-- @moduledoc -->
-
-## Fetures
-
-- **Handles control frames automatically**
-  - closes the connection after receiving the `:close` frame and invokes the `c:handle_disconnect/2` callback
-  - replies to server `:ping` frames with `:pong` frames _(you'll have to handle incoming `:pong` frames if you ping the server)_
 
 ## Usage
 
