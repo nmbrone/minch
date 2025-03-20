@@ -110,11 +110,13 @@ defmodule Minch.ClientTest do
   end
 
   test "sends pong to server ping automatically", ctx do
+    assert_receive {:client, :handle_connect, _}
     :ok = Server.send_frame(ctx.server, {:ping, "123"})
     assert_receive {:server, :frame, {:pong, "123"}}
   end
 
   test "handle_frame/2 is called with all frames", ctx do
+    assert_receive {:client, :handle_connect, _}
     Server.send_frame(ctx.server, {:text, "hello"})
     Server.send_frame(ctx.server, {:binary, <<>>})
     Server.send_frame(ctx.server, {:pong, "123"})
@@ -129,6 +131,7 @@ defmodule Minch.ClientTest do
   end
 
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
+    assert_receive {:client, :handle_connect, _}
     :ok = Server.send_frame(ctx.server, :close)
     assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, _state]}
   end
