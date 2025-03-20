@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/nmbrone/minch/actions/workflows/ci.yml/badge.svg)](https://github.com/nmbrone/minch/actions/workflows/ci.yml)
 
-A WebSocket client build around [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
+A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
 
 ## Installation
 
@@ -21,6 +21,12 @@ end
 <!-- x-release-please-end -->
 
 <!-- @moduledoc -->
+
+## Fetures
+
+- **Handles control frames automatically**
+  - closes the connection after receiving the `:close` frame and invokes the `c:handle_disconnect/2` callback
+  - replies to server `:ping` frames with `:pong` frames _(you'll have to handle incoming `:pong` frames if you ping the server)_
 
 ## Usage
 
@@ -51,7 +57,7 @@ defmodule EchoClient do
   end
 
   @impl true
-  def handle_connect(state) do
+  def handle_connect(_response, state) do
     Logger.info("connected")
     Process.send_after(self(), :produce, 5000)
     {:reply, {:text, "welcome"}, %{state | connected?: true}}

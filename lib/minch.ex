@@ -1,7 +1,7 @@
 defmodule Minch do
   @external_resource "README.md"
   @moduledoc """
-  A WebSocket client build around `Mint.WebSocket`.
+  A WebSocket client build on top of `Mint.WebSocket`.
   """
   @moduledoc @moduledoc <>
                (File.read!(@external_resource)
@@ -60,10 +60,6 @@ defmodule Minch do
 
   @doc """
   Invoked to handle an incoming WebSocket frame.
-
-  A "close" frame will cause the connection to be closed but you'll still receive the frame.
-
-  Other than that, Minch does not intercept nor handle control frames automatically.
   """
   @callback handle_frame(frame :: Mint.WebSocket.frame(), state :: term()) ::
               {:ok, new_state}
@@ -118,7 +114,7 @@ defmodule Minch do
   end
 
   @doc """
-  Closes a connection opened by `connect/3`.
+  Closes the connection opened by `connect/3`.
   """
   @spec close(pid()) :: :ok
   def close(pid) do
