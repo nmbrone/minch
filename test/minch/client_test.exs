@@ -61,8 +61,8 @@ defmodule Minch.ClientTest do
       {:reply, :ping, state}
     end
 
-    def handle_disconnect(reason, state) do
-      send(state.receiver, {:client, :handle_disconnect, [reason, state]})
+    def handle_disconnect(reason, attempt, state) do
+      send(state.receiver, {:client, :handle_disconnect, [reason, attempt, state]})
       {:reconnect, 50, state}
     end
 
@@ -96,13 +96,13 @@ defmodule Minch.ClientTest do
   end
 
   test "handle_disconnect/2 is called after connection failed" do
-    Client.start_link(%{receiver: self(), url: "ws://localhost:8883"})
+    Client.start_link(%{receiver: self(), url: "ws://example.test"})
 
     assert_receive {:client, :handle_disconnect,
-                    [%Mint.TransportError{reason: :econnrefused}, _state]}
+                    [%Mint.TransportError{reason: :nxdomain}, 1, _state]}
 
     assert_receive {:client, :handle_disconnect,
-                    [%Mint.TransportError{reason: :econnrefused}, _state]}
+                    [%Mint.TransportError{reason: :nxdomain}, 2, _state]}
   end
 
   test "replies from a callback" do
@@ -133,7 +133,7 @@ defmodule Minch.ClientTest do
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
     assert_receive {:client, :handle_connect, _}
     :ok = Server.send_frame(ctx.server, :close)
-    assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, _state]}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, 0, _state]}
   end
 
   test "connection is properly closed and terminate/2 is called" do
@@ -154,6 +154,6 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_connect, _}
     assert :ok = Minch.send_frame(ctx.client, :close)
     assert_receive {:server, :terminate, :remote}
-    assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, _state]}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, 0, _state]}
   end
 end
