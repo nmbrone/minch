@@ -7,7 +7,7 @@ defmodule Minch.Client do
 
   defmodule State do
     @moduledoc false
-    defstruct [:conn, :callback, :callback_state, :timer_ref]
+    defstruct [:conn, :conn_attempt, :callback, :callback_state, :timer_ref]
   end
 
   use GenServer
@@ -34,7 +34,8 @@ defmodule Minch.Client do
   def init({callback, init_arg}) when is_atom(callback) do
     Process.flag(:trap_exit, true)
     {:ok, callback_state} = callback.init(init_arg)
-    {:ok, %State{callback: callback, callback_state: callback_state}, {:continue, :connect}}
+    state = %State{callback: callback, callback_state: callback_state, conn_attempt: 0}
+    {:ok, state, {:continue, :connect}}
   end
 
   @impl true
@@ -66,9 +67,10 @@ defmodule Minch.Client do
 
     case Conn.open(url, headers, options) do
       {:ok, conn} ->
-        {:noreply, %{state | conn: conn}}
+        {:noreply, %{state | conn: conn, conn_attempt: 0}}
 
       {:error, error} ->
+        state = %{state | conn_attempt: state.conn_attempt + 1}
         {:noreply, callback_handle_disconnect(error, state)}
     end
   end
@@ -145,7 +147,7 @@ defmodule Minch.Client do
 
   defp callback_handle_disconnect(error, state) do
     error
-    |> state.callback.handle_disconnect(state.callback_state)
+    |> state.callback.handle_disconnect(state.conn_attempt, state.callback_state)
     |> handle_callback_result(state)
   end
 
