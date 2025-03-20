@@ -2,8 +2,6 @@
 
 [![CI](https://github.com/nmbrone/minch/actions/workflows/ci.yml/badge.svg)](https://github.com/nmbrone/minch/actions/workflows/ci.yml)
 
-A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
-
 <!-- @moduledoc -->
 
 A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
