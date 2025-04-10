@@ -67,7 +67,7 @@ defmodule Minch.Client do
 
     case Conn.open(url, headers, options) do
       {:ok, conn} ->
-        {:noreply, %{state | conn: conn, conn_attempt: 0}}
+        {:noreply, %{state | conn: conn, conn_attempt: 1}}
 
       {:error, error} ->
         state = %{state | conn_attempt: state.conn_attempt + 1}
