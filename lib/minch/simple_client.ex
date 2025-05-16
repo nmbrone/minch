@@ -51,7 +51,7 @@ defmodule Minch.SimpleClient do
   end
 
   @impl true
-  def handle_disconnect(reason, %State{} = state) do
+  def handle_disconnect(reason, _attempt, %State{} = state) do
     if not state.connected? do
       send(state.receiver, {:connection_error, state.receiver_ref, reason})
     end

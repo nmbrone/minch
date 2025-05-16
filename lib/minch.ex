@@ -49,7 +49,7 @@ defmodule Minch do
   the client to reconnect by sending it a message and returning `{:reconnect, state}` from the
   `c:handle_info/2` callback.
   """
-  @callback handle_disconnect(reason :: term(), state :: term()) ::
+  @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state :: term()) ::
               {:ok, new_state}
               | {:reconnect, backoff :: pos_integer(), new_state}
             when new_state: term()

@@ -41,8 +41,8 @@ defmodule Minch.SimpleClientTest do
   end
 
   test "returns the connection error" do
-    assert {:error, %Mint.TransportError{reason: :econnrefused}} =
-             Minch.connect("ws://localhost:50000")
+    assert {:error, %Mint.TransportError{reason: :nxdomain}} =
+             Minch.connect("ws://example.test")
   end
 
   test "sends headers to the server while connecting", %{url: url} do
