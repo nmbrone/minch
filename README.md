@@ -6,7 +6,7 @@
 
 A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
 
-## Fetures
+## Features
 
 - **Reconnects with backoff**
 - **Handles control frames automatically**

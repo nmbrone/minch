@@ -24,7 +24,7 @@ defmodule Minch.SimpleClient do
       connected?: false
     }
 
-    with {:ok, pid} <- Minch.Client.start(__MODULE__, state) do
+    with {:ok, pid} <- Minch.Conn.start(__MODULE__, state) do
       receive do
         {:connected, ^ref} -> {:ok, pid, ref}
         {:connection_error, ^ref, reason} -> {:error, reason}
@@ -56,7 +56,7 @@ defmodule Minch.SimpleClient do
       send(state.receiver, {:connection_error, state.receiver_ref, reason})
     end
 
-    exit({:shutdown, reason})
+    {:stop, {:shutdown, reason}}
   end
 
   @impl true
@@ -67,6 +67,6 @@ defmodule Minch.SimpleClient do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %State{monitor_ref: ref}) do
-    exit({:shutdown, :receiver_down})
+    {:stop, {:shutdown, :receiver_down}}
   end
 end

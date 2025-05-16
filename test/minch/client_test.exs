@@ -11,7 +11,13 @@ defmodule Minch.ClientTest do
 
     def init(req, state) do
       send(state.receiver, {:server, :request, req})
-      {:cowboy_websocket, req, state}
+
+      if state.unauthorized do
+        req = :cowboy_req.reply(401, %{}, "Unauthorized", req)
+        {:ok, req, state}
+      else
+        {:cowboy_websocket, req, state}
+      end
     end
 
     def websocket_init(state) do
@@ -58,7 +64,7 @@ defmodule Minch.ClientTest do
 
     def handle_connect(response, state) do
       send(state.receiver, {:client, :handle_connect, [response, state]})
-      {:reply, :ping, state}
+      {:ok, state}
     end
 
     def handle_disconnect(reason, attempt, state) do
@@ -68,7 +74,11 @@ defmodule Minch.ClientTest do
 
     def handle_info(message, state) do
       send(state.receiver, {:client, :handle_info, [message, state]})
-      {:ok, state}
+
+      case message do
+        {:reply, frame} -> {:reply, frame, state}
+        _ -> {:ok, state}
+      end
     end
 
     def handle_frame(frame, state) do
@@ -77,12 +87,21 @@ defmodule Minch.ClientTest do
     end
   end
 
-  setup do
+  setup ctx do
     port = 8881
     url = "ws://localhost:#{port}"
-    start_link_supervised!({Server, state: %{receiver: self()}, port: port})
-    client = start_link_supervised!({Client, %{receiver: self(), url: url}})
-    assert_receive {:server, :init, server}
+    server_state = %{receiver: self(), unauthorized: ctx[:unauthorized]}
+    start_link_supervised!({Server, state: server_state, port: port})
+    {:ok, client} = Client.start_link(%{receiver: self(), url: url})
+
+    server =
+      if server_state.unauthorized do
+        nil
+      else
+        assert_receive {:server, :init, server}
+        server
+      end
+
     [client: client, server: server, url: url]
   end
 
@@ -95,6 +114,12 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_connect, [%{status: 101, headers: _}, _state]}
   end
 
+  @tag :unauthorized
+  test "handle_disconnect/2 is called after upgrading error" do
+    assert_receive {:client, :handle_disconnect,
+                    [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 1, _]}
+  end
+
   test "handle_disconnect/2 is called after connection failed" do
     Client.start_link(%{receiver: self(), url: "ws://example.test"})
 
@@ -105,7 +130,9 @@ defmodule Minch.ClientTest do
                     [%Mint.TransportError{reason: :nxdomain}, 2, _state]}
   end
 
-  test "replies from a callback" do
+  test "replies from a callback", ctx do
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:reply, :ping})
     assert_receive {:server, :frame, :ping}
   end
 
@@ -136,18 +163,16 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_disconnect, [{:close, 1000, <<>>}, 1, _state]}
   end
 
-  test "connection is properly closed and terminate/2 is called" do
+  test "connection is properly closed and terminate/2 is called", ctx do
     assert_receive {:client, :handle_connect, _}
-    stop_supervised!(Client)
+    Minch.close(ctx.client)
     assert_receive {:server, :terminate, :remote}
-    assert_receive {:client, :terminate, [:shutdown, _state]}
+    assert_receive {:client, :terminate, [:normal, _state]}
   end
 
   test "returns an error if the frame can't be sent", ctx do
     {:ok, pid} = Client.start_link(%{receiver: self(), url: ctx.url})
-
-    assert {:error, %Minch.Conn.NotUpgradedError{}} =
-             Minch.send_frame(pid, {:text, "hello"})
+    assert {:error, :not_connected} = Minch.send_frame(pid, {:text, "hello"})
   end
 
   test "closes the connection by sending a :close frame to the server", ctx do

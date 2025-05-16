@@ -3,81 +3,75 @@ defmodule Minch do
   @moduledoc File.read!(@external_resource)
              |> String.split("<!-- @moduledoc -->")
              |> List.last()
+  require Logger
 
-  @type client :: GenServer.server()
-  @type response_map :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
+  @type client :: :gen_statem.server_ref()
+  @type state :: term()
+  @type response :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
+  @type frame :: Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()
+
+  @type callback_result ::
+          {:ok, state()}
+          | {:reply, frame() | [frame()], state()}
+          | {:stop, reason :: term()}
 
   @doc """
   Invoked when the client process is started.
   """
-  @callback init(init_arg :: term()) :: {:ok, new_state :: term()}
+  @callback init(init_arg :: term()) :: {:ok, state()}
 
   @doc """
   Invoked to retrieve the connection details.
 
-  See `Minch.Conn.open/3`.
+  See options for `Mint.HTTP.connect/4` and `Mint.WebSocket.upgrade/5`.
   """
-  @callback connect(state :: term()) ::
+  @callback connect(state :: state()) ::
               url
               | {url, headers}
               | {url, headers, options}
             when url: String.t() | URI.t(), headers: Mint.Types.headers(), options: Keyword.t()
 
   @doc """
-  Invoked to handle all other messages.
+  Invoked to handle info messages.
   """
-  @callback handle_info(msg :: term(), state :: term()) ::
-              {:ok, new_state}
-              | {:reply, frame :: Mint.WebSocket.frame(), new_state}
-              | {:reconnect, new_state}
-            when new_state: term()
+  @callback handle_info(message :: term(), state()) :: callback_result()
 
   @doc """
   Invoked to handle a successful connection.
   """
-  @callback handle_connect(response :: response_map(), state :: term()) ::
-              {:ok, new_state}
-              | {:reply, frame :: Mint.WebSocket.frame(), new_state}
-            when new_state: term()
+  @callback handle_connect(response(), state()) :: callback_result()
 
   @doc """
   Invoked to handle a disconnect from the server or a failed connection attempt.
 
   Returning `{:reconnect, backoff, state}` will schedule a reconnect after `backoff` milliseconds.
-
-  Returning `{:ok, state}` will keep the client in the disconnected state. Later you can instruct
-  the client to reconnect by sending it a message and returning `{:reconnect, state}` from the
-  `c:handle_info/2` callback.
   """
-  @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state :: term()) ::
-              {:ok, new_state}
-              | {:reconnect, backoff :: pos_integer(), new_state}
-            when new_state: term()
+  @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state()) ::
+              {:reconnect, backoff :: pos_integer(), state()}
+              | {:stop, reason :: term()}
+
+  @doc """
+  Invoked to handle internal errors.
+  """
+  @callback handle_error(error :: term(), state()) :: callback_result()
 
   @doc """
   Invoked to handle an incoming WebSocket frame.
   """
-  @callback handle_frame(frame :: Mint.WebSocket.frame(), state :: term()) ::
-              {:ok, new_state}
-              | {:reply, frame :: Mint.WebSocket.frame(), new_state}
-            when new_state: term()
+  @callback handle_frame(Mint.WebSocket.frame(), state()) :: callback_result()
 
   @doc """
   Invoked when the client process is about to exit.
   """
-  @callback terminate(reason, state :: term()) :: term()
+  @callback terminate(reason, state :: state()) :: term()
             when reason: :normal | :shutdown | {:shutdown, term()} | term()
-
-  @optional_callbacks init: 1,
-                      handle_info: 2,
-                      terminate: 2
 
   @doc """
   Starts a `Minch` client process linked to the current process.
   """
-  @spec start_link(module(), any(), GenServer.options()) :: GenServer.on_start()
-  def start_link(module, init_arg, options \\ []) do
-    Minch.Client.start_link(module, init_arg, options)
+  @spec start_link(module(), term(), [:gen_statem.start_opt()]) :: :gen_statem.start_ret()
+  def start_link(module, init_arg, opts \\ []) do
+    Minch.Conn.start_link(module, init_arg, opts)
   end
 
   @doc """
@@ -114,16 +108,16 @@ defmodule Minch do
   """
   @spec close(pid()) :: :ok
   def close(pid) do
-    GenServer.stop(pid)
+    :gen_statem.stop(pid)
   end
 
   @doc """
   Sends a WebSocket frame.
   """
   @spec send_frame(client(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
-          :ok | {:error, Mint.WebSocket.error() | :not_connected}
+          :ok | {:error, term()}
   def send_frame(client, frame) do
-    Minch.Client.send_frame(client, frame)
+    :gen_statem.call(client, {:send_frame, frame})
   end
 
   @doc """
@@ -166,9 +160,16 @@ defmodule Minch do
         {:ok, state}
       end
 
+      def handle_error(error, state) do
+        require Logger
+        Logger.error([inspect(__MODULE__), " - ", inspect(error)])
+        {:ok, state}
+      end
+
       defoverridable child_spec: 1,
                      init: 1,
                      handle_info: 2,
+                     handle_error: 2,
                      terminate: 2
     end
   end
