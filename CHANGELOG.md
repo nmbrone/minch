@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/nmbrone/minch/compare/v0.1.0...v0.2.0) (2025-05-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* add connection attempt to the `handle_disconnect` callback ([#42](https://github.com/nmbrone/minch/issues/42))
+* handle control frames automatically ([#40](https://github.com/nmbrone/minch/issues/40))
+* replace c:handle_connect/1 with c:handle_connect2 ([#33](https://github.com/nmbrone/minch/issues/33))
+
+### Features
+
+* add connection attempt to the `handle_disconnect` callback ([#42](https://github.com/nmbrone/minch/issues/42)) ([3193661](https://github.com/nmbrone/minch/commit/3193661fa2ecfa507d0c0bfab5b8a5b061a6982d))
+* handle control frames automatically ([#40](https://github.com/nmbrone/minch/issues/40)) ([c41c577](https://github.com/nmbrone/minch/commit/c41c5773076f6d2bc2489d40ca31f953f1fe0733))
+* replace c:handle_connect/1 with c:handle_connect2 ([#33](https://github.com/nmbrone/minch/issues/33)) ([4f659b5](https://github.com/nmbrone/minch/commit/4f659b5300dc563226274379cc3645f0330a2840))
+
 ## 0.1.0 (2023-10-12)
 
 
