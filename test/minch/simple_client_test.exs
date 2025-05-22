@@ -41,8 +41,7 @@ defmodule Minch.SimpleClientTest do
   end
 
   test "returns the connection error" do
-    assert {:error, %Mint.TransportError{reason: :nxdomain}} =
-             Minch.connect("ws://example.test")
+    assert {:error, %Mint.TransportError{reason: :nxdomain}} = Minch.connect("ws://example.test")
   end
 
   test "sends headers to the server while connecting", %{url: url} do
@@ -63,17 +62,21 @@ defmodule Minch.SimpleClientTest do
     assert {:text, "hello"} = Minch.receive_frame(ref)
   end
 
-  test "properly closes the connection", %{url: url} do
+  test "gracefully closes the connection when terminating", %{url: url} do
     {:ok, pid, _ref} = Minch.connect(url)
     :ok = Minch.close(pid)
     assert_receive {:server, :terminate, :remote}
   end
 
-  test "properly closes the connection when the parent process dies", %{url: url} do
-    Task.start(fn ->
-      {:ok, _pid, _ref} = Minch.connect(url)
-    end)
+  test "gracefully closes the connection when the parent process dies", %{url: url} do
+    {:ok, pid} =
+      Task.start(fn ->
+        {:ok, _pid, _ref} = Minch.connect(url)
+        receive(do: (:stop -> exit(:normal)))
+      end)
 
+    assert_receive {:server, :init, _server}
+    send(pid, :stop)
     assert_receive {:server, :terminate, :remote}
   end
 

@@ -6,12 +6,13 @@
 
 A WebSocket client build on top of [`Mint.WebSocket`](https://github.com/elixir-mint/mint_web_socket).
 
-## Fetures
+## Features
 
 - **Reconnects with backoff**
-- **Handles control frames automatically**
-  - closes the connection after receiving the `:close` frame and invokes the `c:handle_disconnect/2` callback
-  - replies to server `:ping` frames with `:pong` frames _(you'll have to handle incoming `:pong` frames if you ping the server)_
+  - Use `Minch.backoff/2` to calculate an exponential backoff duration.
+- **Handling control frames**
+  - Closes the connection after receiving a `:close` frame.
+  - Replies to server pings automatically.
 
 ## Installation
 
@@ -30,6 +31,28 @@ end
 <!-- x-release-please-end -->
 
 ## Usage
+
+### Basic example
+
+```elixir
+defmodule EchoClient do
+  use Minch
+
+  @impl true
+  def connect(state) do
+    state.url
+  end
+
+  @impl true
+  def handle_frame(frame, state) do
+    IO.inspect(frame)
+    {:ok, state}
+  end
+end
+
+{:ok, pid} = Minch.start_link(EchoClient, %{url: "wss://ws.postman-echo.com/raw"})
+Minch.send_frame(pid, :ping)
+```
 
 ### Supervised client
 
@@ -65,9 +88,9 @@ defmodule EchoClient do
   end
 
   @impl true
-  def handle_disconnect(reason, state) do
+  def handle_disconnect(reason, attempt, state) do
     Logger.warning("disconnected: #{inspect(reason)}")
-    {:reconnect, 1000, %{state | connected?: false}}
+    {:reconnect, Minch.backoff(attempt), %{state | connected?: false}}
   end
 
   @impl true
