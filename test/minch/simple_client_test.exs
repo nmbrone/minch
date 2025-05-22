@@ -11,7 +11,20 @@ defmodule Minch.SimpleClientTest do
 
     def init(req, state) do
       send(state.receiver, {:server, :request, req})
-      {:cowboy_websocket, req, state}
+
+      case state.init_result do
+        :ok ->
+          {:cowboy_websocket, req, state}
+
+        :unauthorized ->
+          send(state.receiver, {:server, :init, nil})
+          req = :cowboy_req.reply(401, %{}, "Unauthorized", req)
+          {:ok, req, state}
+
+        :timeout ->
+          send(state.receiver, {:server, :init, nil})
+          Process.sleep(:infinity)
+      end
     end
 
     def websocket_init(state) do
@@ -34,14 +47,20 @@ defmodule Minch.SimpleClientTest do
     end
   end
 
-  setup do
+  setup ctx do
     port = 8882
-    start_link_supervised!({Server, state: %{receiver: self()}, port: port})
+    server_state = Map.merge(%{receiver: self(), init_result: :ok}, ctx[:server_state] || %{})
+    start_link_supervised!({Server, state: server_state, port: port})
     [url: "ws://localhost:#{port}"]
   end
 
   test "returns the connection error" do
     assert {:error, %Mint.TransportError{reason: :nxdomain}} = Minch.connect("ws://example.test")
+  end
+
+  @tag server_state: %{init_result: :timeout}
+  test "handles the connection timeout", %{url: url} do
+    {:error, :timeout} = Minch.connect(url, [], transport_opts: [timeout: 100])
   end
 
   test "sends headers to the server while connecting", %{url: url} do

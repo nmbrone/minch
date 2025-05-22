@@ -26,6 +26,11 @@ defmodule Minch.Conn do
     apply(:gen_statem, :start, start_args(module, init_arg, opts))
   end
 
+  @spec stop(:gen_statem.server_ref()) :: :ok
+  def stop(conn) do
+    :gen_statem.stop(conn)
+  end
+
   defp start_args(module, init_arg, opts) do
     {name, opts} = Keyword.pop(opts, :name)
     args = [__MODULE__, {module, init_arg}, opts]
