@@ -122,7 +122,7 @@ defmodule Minch do
   @doc """
   Receives an incoming WebSocket frame.
 
-  See `connect/2`.
+  See `connect/3`.
   """
   @spec receive_frame(Mint.Types.request_ref(), timeout()) :: Mint.WebSocket.frame() | :timeout
   def receive_frame(ref, timeout \\ 5_000) do
