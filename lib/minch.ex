@@ -3,7 +3,6 @@ defmodule Minch do
   @moduledoc File.read!(@external_resource)
              |> String.split("<!-- @moduledoc -->")
              |> List.last()
-  require Logger
 
   @type client :: :gen_statem.server_ref()
   @type state :: term()
@@ -134,6 +133,37 @@ defmodule Minch do
     end
   end
 
+  @doc """
+  Calculates an exponential backoff duration.
+
+  It accepts the following options:
+
+    * `:min` - The minimum backoff duration in milliseconds. Defaults to `200`.
+    * `:max` - The maximum backoff duration in milliseconds. Defaults to `30_000`.
+    * `:factor` - The exponent to apply to the attempt number. Defaults to `2`.
+
+  ## Examples
+
+      iex(8)> for attempt <- 1..20, do: Minch.backoff(attempt)
+      [200, 800, 1800, 3200, 5000, 7200, 9800, 12800, 16200, 20000, 24200, 28800,
+      30000, 30000, 30000, 30000, 30000, 30000, 30000, 30000]
+
+      for attempt <- 1..20, do: Minch.backoff(attempt, min: 100, max: 10000, factor: 1.5)
+      [100, 283, 520, 800, 1118, 1470, 1852, 2263, 2700, 3162, 3648, 4157, 4687, 5238,
+       5809, 6400, 7009, 7637, 8282, 8944]
+  """
+  @spec backoff(non_neg_integer(),
+          min: pos_integer(),
+          max: pos_integer(),
+          factor: pos_integer()
+        ) :: non_neg_integer()
+  def backoff(attempt, opts \\ []) do
+    min = Keyword.get(opts, :min, 200)
+    max = Keyword.get(opts, :max, 30_000)
+    factor = Keyword.get(opts, :factor, 2)
+    (min * :math.pow(attempt, factor)) |> round() |> min(max)
+  end
+
   defmacro __using__(opts) do
     quote location: :keep do
       @behaviour Minch
@@ -148,12 +178,20 @@ defmodule Minch do
         )
       end
 
-      def init(_init_arg) do
-        {:ok, nil}
+      def init(init_arg) do
+        {:ok, init_arg}
       end
 
       def terminate(_reason, _state) do
         :ok
+      end
+
+      def handle_connect(_, state) do
+        {:ok, state}
+      end
+
+      def handle_disconnect(_reason, attempt, state) do
+        {:reconnect, Minch.backoff(attempt), state}
       end
 
       def handle_info(_message, state) do
@@ -168,6 +206,8 @@ defmodule Minch do
 
       defoverridable child_spec: 1,
                      init: 1,
+                     handle_connect: 2,
+                     handle_disconnect: 3,
                      handle_info: 2,
                      handle_error: 2,
                      terminate: 2
