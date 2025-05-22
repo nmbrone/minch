@@ -107,7 +107,7 @@ defmodule Minch do
   """
   @spec close(pid()) :: :ok
   def close(pid) do
-    :gen_statem.stop(pid)
+    Minch.Conn.stop(pid)
   end
 
   @doc """

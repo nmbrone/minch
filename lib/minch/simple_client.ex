@@ -11,7 +11,8 @@ defmodule Minch.SimpleClient do
           {:ok, pid(), reference()} | {:error, Mint.WebSocket.error() | :timeout}
   def start(url, headers \\ [], options \\ []) do
     # the default timeout is 30_000
-    timeout = (options[:transport_options][:timeout] || 30_000) + 1_000
+    # https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-transport-options
+    timeout = options[:transport_opts][:timeout] || 30_000
 
     ref = make_ref()
 
@@ -29,7 +30,9 @@ defmodule Minch.SimpleClient do
         {:connected, ^ref} -> {:ok, pid, ref}
         {:connection_error, ^ref, reason} -> {:error, reason}
       after
-        timeout -> {:error, timeout}
+        timeout ->
+          Minch.Conn.stop(pid)
+          {:error, :timeout}
       end
     end
   end
