@@ -18,26 +18,9 @@ if Code.ensure_loaded?(:cowboy) do
 
           transport_opts = transport_opts ++ so_reuse_port
 
-          ref = make_ref()
-
-          proto_opts = %{
+          :ranch.child_spec(make_ref(), :ranch_tcp, transport_opts, :cowboy_clear, %{
             env: %{dispatch: :cowboy_router.compile([{:_, [{:_, __MODULE__, state}]}])}
-          }
-
-          case :ranch.child_spec(ref, :ranch_tcp, transport_opts, :cowboy_clear, proto_opts) do
-            {id, start, restart, shutdown, type, modules} ->
-              %{
-                id: id,
-                start: start,
-                restart: restart,
-                shutdown: shutdown,
-                type: type,
-                modules: modules
-              }
-
-            child_spec when is_map(child_spec) ->
-              child_spec
-          end
+          })
         end
 
         @impl true
