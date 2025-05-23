@@ -42,6 +42,8 @@ defmodule Minch.ClientTest do
 
       case message do
         {:reply, frame} -> {:reply, frame, state}
+        {:close, code, detail} -> {:close, code, detail, state}
+        {:stop, reason} -> {:stop, reason, state}
         _ -> {:ok, state}
       end
     end
@@ -121,7 +123,7 @@ defmodule Minch.ClientTest do
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
     assert_receive {:client, :handle_connect, _}
     Server.send_frame(ctx.server, :close)
-    assert_receive {:client, :handle_disconnect, _}
+    assert_receive {:client, :handle_disconnect, [%Mint.TransportError{reason: :closed}, 1, _]}
   end
 
   test "connection is properly closed and terminate/2 is called", ctx do
@@ -136,10 +138,17 @@ defmodule Minch.ClientTest do
     assert {:error, :not_connected} = Minch.send_frame(pid, {:text, "hello"})
   end
 
-  test "closes the connection by sending a :close frame to the server", ctx do
+  test "gracefully closes the connection by returning a :close tuple from a callback", ctx do
     assert_receive {:client, :handle_connect, _}
-    assert :ok = Minch.send_frame(ctx.client, :close)
+    send(ctx.client, {:close, 1000, "bye"})
+    assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
+    assert_receive {:client, :handle_disconnect, [%Mint.TransportError{reason: :closed}, 1, _]}
+  end
+
+  test "stops the client process by returning a :stop tuple from a callback", ctx do
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:stop, :normal})
     assert_receive {:server, :terminate, :remote}
-    assert_receive {:client, :handle_disconnect, _}
+    assert_receive {:client, :terminate, [:normal, _]}
   end
 end

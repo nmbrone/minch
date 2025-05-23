@@ -12,6 +12,7 @@ defmodule Minch do
   @type callback_result ::
           {:ok, state()}
           | {:reply, frame() | [frame()], state()}
+          | {:close, code :: non_neg_integer(), reason :: binary(), state()}
           | {:stop, reason :: term(), state()}
 
   @doc """
