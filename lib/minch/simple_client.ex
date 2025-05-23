@@ -2,10 +2,9 @@ defmodule Minch.SimpleClient do
   @moduledoc false
   use Minch
 
-  defmodule State do
-    @moduledoc false
-    defstruct [:url, :headers, :options, :receiver, :receiver_ref, :monitor_ref, :connected?]
-  end
+  alias __MODULE__, as: State
+
+  defstruct [:url, :headers, :options, :receiver, :receiver_ref, :monitor_ref, :connected?]
 
   @spec start(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
           {:ok, pid(), reference()} | {:error, Mint.WebSocket.error() | :timeout}
@@ -59,7 +58,7 @@ defmodule Minch.SimpleClient do
       send(state.receiver, {:connection_error, state.receiver_ref, reason})
     end
 
-    {:stop, {:shutdown, reason}}
+    {:stop, {:shutdown, reason}, state}
   end
 
   @impl true
@@ -69,7 +68,7 @@ defmodule Minch.SimpleClient do
   end
 
   @impl true
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, %State{monitor_ref: ref}) do
-    {:stop, {:shutdown, :receiver_down}}
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %State{monitor_ref: ref} = state) do
+    {:stop, {:shutdown, :receiver_down}, state}
   end
 end
