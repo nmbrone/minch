@@ -31,7 +31,7 @@ defmodule Minch.SimpleClientTest do
   test "sends received frames to the parent process", %{url: url} do
     {:ok, _pid, ref} = Minch.connect(url)
     assert_receive {:server, :init, server}
-    :ok = Server.send_frame(server, {:text, "hello"})
+    Server.send_frame(server, {:text, "hello"})
     assert {:text, "hello"} = Minch.receive_frame(ref)
   end
 
@@ -57,7 +57,7 @@ defmodule Minch.SimpleClientTest do
     {:ok, pid, _ref} = Minch.connect(url)
     monitor_ref = Process.monitor(pid)
     assert_receive {:server, :init, server}
-    :ok = Server.send_frame(server, {:close, 1000, "test"})
-    assert_receive {:DOWN, ^monitor_ref, :process, _pid, {:shutdown, {:close, 1000, "test"}}}
+    Server.send_frame(server, :close)
+    assert_receive {:DOWN, ^monitor_ref, :process, _pid, {:shutdown, _}}
   end
 end

@@ -4,7 +4,7 @@ defmodule Minch do
              |> String.split("<!-- @moduledoc -->")
              |> List.last()
 
-  @type client :: :gen_statem.server_ref()
+  @type client :: GenServer.server()
   @type state :: term()
   @type response :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
   @type frame :: Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()
@@ -12,7 +12,7 @@ defmodule Minch do
   @type callback_result ::
           {:ok, state()}
           | {:reply, frame() | [frame()], state()}
-          | {:stop, reason :: term()}
+          | {:stop, reason :: term(), state()}
 
   @doc """
   Invoked when the client process is started.
@@ -47,7 +47,7 @@ defmodule Minch do
   """
   @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state()) ::
               {:reconnect, backoff :: pos_integer(), state()}
-              | {:stop, reason :: term()}
+              | {:stop, reason :: term(), state()}
 
   @doc """
   Invoked to handle internal errors.
@@ -68,7 +68,7 @@ defmodule Minch do
   @doc """
   Starts a `Minch` client process linked to the current process.
   """
-  @spec start_link(module(), term(), [:gen_statem.start_opt()]) :: :gen_statem.start_ret()
+  @spec start_link(module(), term(), GenServer.options()) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
     Minch.Conn.start_link(module, init_arg, opts)
   end
@@ -116,7 +116,7 @@ defmodule Minch do
   @spec send_frame(client(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
           :ok | {:error, term()}
   def send_frame(client, frame) do
-    :gen_statem.call(client, {:send_frame, frame})
+    GenServer.call(client, {:send_frame, frame})
   end
 
   @doc """
