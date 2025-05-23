@@ -1,6 +1,8 @@
 defmodule Server do
   use Minch.TestServer
 
+  # https://ninenines.eu/docs/en/cowboy/2.13/manual/cowboy_websocket/
+
   def send_frame(server, frame) do
     send(server, {:send_frame, frame})
     :ok
