@@ -56,7 +56,7 @@ defmodule Minch.ClientTest do
     port = 8881
     url = "ws://localhost:#{port}"
 
-    server_state = Map.merge(%{receiver: self(), init_result: :ok}, ctx[:server_state] || %{})
+    server_state = Map.merge(%{receiver: self(), connect_result: :ok}, ctx[:server_state] || %{})
     start_link_supervised!({Server, state: server_state, port: port})
 
     client_state = Map.merge(%{receiver: self(), url: url}, ctx[:client_state] || %{})
@@ -75,7 +75,7 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_connect, [%{status: 101, headers: _}, _state]}
   end
 
-  @tag server_state: %{init_result: :unauthorized}
+  @tag server_state: %{connect_result: :unauthorized}
   test "handle_disconnect/2 is called after upgrading error" do
     assert_receive {:client, :handle_disconnect,
                     [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 1, _]}
@@ -94,7 +94,7 @@ defmodule Minch.ClientTest do
   test "replies from a callback", ctx do
     assert_receive {:client, :handle_connect, _}
     send(ctx.client, {:reply, :ping})
-    assert_receive {:server, :frame, :ping}
+    assert_receive {:server, :frame, {:ping, ""}}
   end
 
   test "sends pong to server ping automatically", ctx do
@@ -120,7 +120,7 @@ defmodule Minch.ClientTest do
 
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
     assert_receive {:client, :handle_connect, _}
-    Server.send_frame(ctx.server, :close)
+    Server.close(ctx.server)
     assert_receive {:client, :handle_disconnect, _}
   end
 

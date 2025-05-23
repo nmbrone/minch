@@ -1,34 +1,55 @@
-if Code.ensure_loaded?(:cowboy) do
+if Code.ensure_loaded?(Bandit) and Code.ensure_loaded?(WebSockAdapter) do
   defmodule Minch.TestServer do
     @moduledoc false
 
+    defmodule UpgradePlug do
+      @moduledoc false
+      use Plug.Builder, copy_opts_to_assign: :opts
+
+      plug(:connect)
+      plug(:upgrade)
+
+      defp connect(%{assigns: %{opts: {handler, state, upgrade_opts}}} = conn, _) do
+        {conn, state} = handler.connect(conn, state)
+        assign(conn, :opts, {handler, state, upgrade_opts})
+      end
+
+      defp upgrade(%{assigns: %{opts: {handler, state, upgrade_opts}}} = conn, _) do
+        conn
+        |> WebSockAdapter.upgrade(handler, state, upgrade_opts)
+        |> Plug.Conn.halt()
+      end
+    end
+
+    def start_link(handler, state, upgrade_opts \\ [], bandit_opts \\ []) do
+      bandit_opts
+      |> Keyword.put(:plug, {UpgradePlug, {handler, state, upgrade_opts}})
+      |> Keyword.put_new(:startup_log, false)
+      |> Bandit.start_link()
+    end
+
     defmacro __using__(_) do
-      quote do
-        @behaviour :cowboy_websocket
+      quote location: :keep do
+        @behaviour WebSock
 
-        def child_spec(opts) when is_list(opts) do
-          {state, transport_opts} = Keyword.pop(opts, :state)
-
-          so_reuse_port =
-            case :os.type() do
-              {:unix, :linux} -> [{:raw, 0x1, 0xF, <<1::32-native>>}]
-              {:unix, :darwin} -> [{:raw, 0xFFFF, 0x0200, <<1::32-native>>}]
-              _ -> []
-            end
-
-          transport_opts = transport_opts ++ so_reuse_port
-
-          :ranch.child_spec(make_ref(), :ranch_tcp, transport_opts, :cowboy_clear, %{
-            env: %{dispatch: :cowboy_router.compile([{:_, [{:_, __MODULE__, state}]}])}
-          })
+        def child_spec(opts) do
+          %{
+            id: __MODULE__,
+            start: {__MODULE__, :start_link, [opts]}
+          }
         end
 
-        @impl true
-        def init(req, state) do
-          {:cowboy_websocket, req, state}
+        def start_link(opts) do
+          {state, opts} = Keyword.pop(opts, :state)
+          {upgrade_opts, bandit_opts} = Keyword.split(opts, [:upgrade_opts])
+          Minch.TestServer.start_link(__MODULE__, state, upgrade_opts, bandit_opts)
         end
 
-        defoverridable init: 2
+        def connect(conn, state) do
+          {conn, state}
+        end
+
+        defoverridable connect: 2
       end
     end
   end

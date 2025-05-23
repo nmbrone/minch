@@ -31,10 +31,11 @@ defmodule Minch.MixProject do
 
   defp deps do
     [
-      {:cowboy, "~> 2.9", optional: true},
+      {:bandit, "~> 1.4", optional: true},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
-      {:mint_web_socket, "~> 1.0"}
+      {:mint_web_socket, "~> 1.0"},
+      {:websock_adapter, "~> 0.5.4", optional: true}
     ]
   end
 
