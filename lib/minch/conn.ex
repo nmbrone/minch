@@ -12,7 +12,8 @@ defmodule Minch.Conn do
     :websocket,
     :callback,
     :callback_state,
-    :reconnect_timer
+    :reconnect_timer,
+    :close_timer
   ]
 
   @internal :"$minch"
@@ -50,8 +51,8 @@ defmodule Minch.Conn do
 
   @impl true
   def terminate(reason, %State{} = state) do
-    if state.websocket, do: send_frame(state, :close)
-    if state.conn, do: Mint.HTTP.close(state.conn)
+    send_frame(state, :close)
+    state = close(state)
     state.callback.terminate(reason, state.callback_state)
   end
 
@@ -64,50 +65,19 @@ defmodule Minch.Conn do
         url -> {url, [], []}
       end
 
-    url = URI.parse(url)
+    case connect(url, headers, options) do
+      {:ok, conn, ref} ->
+        {:noreply, %{state | conn: conn, conn_attempt: 1, request_ref: ref}}
 
-    path =
-      case url.path do
-        nil -> "/"
-        path -> path
-      end
-
-    path =
-      case url.query do
-        nil -> path
-        query -> path <> "?" <> query
-      end
-
-    {http_scheme, ws_scheme} =
-      case url.scheme do
-        "wss" -> {:https, :wss}
-        "ws" -> {:http, :ws}
-      end
-
-    {upgrade_opts, connect_opts} =
-      options
-      # set protocol to HTTP1 by default since WebSocket over HTTP2 is barely supported
-      |> Keyword.put_new(:protocols, [:http1])
-      |> Keyword.split([:extension])
-
-    with {:ok, conn} <- Mint.HTTP.connect(http_scheme, url.host, url.port, connect_opts),
-         {:ok, conn, ref} <- Mint.WebSocket.upgrade(ws_scheme, conn, path, headers, upgrade_opts) do
-      {:noreply, %{state | conn: conn, conn_attempt: 1, request_ref: ref}}
-    else
       {:error, error} ->
         handle_disconnect(error, %{state | conn_attempt: state.conn_attempt + 1})
 
       {:error, conn, error} ->
-        {:ok, conn} = Mint.HTTP.close(conn)
         handle_disconnect(error, %{state | conn_attempt: state.conn_attempt + 1, conn: conn})
     end
   end
 
   @impl true
-  def handle_call({:send_frame, _frame}, _from, %State{websocket: nil} = state) do
-    {:reply, {:error, :not_connected}, state}
-  end
-
   def handle_call({:send_frame, frame}, _from, state) do
     case send_frame(state, frame) do
       {:ok, state} -> {:reply, :ok, state}
@@ -135,6 +105,10 @@ defmodule Minch.Conn do
     {:noreply, %{state | reconnect_timer: nil}, {:continue, :connect}}
   end
 
+  def handle_info({@internal, {:close_timeout, reason}}, state) do
+    handle_disconnect(reason, state)
+  end
+
   def handle_info(message, %State{} = state) do
     case Mint.WebSocket.stream(state.conn, message) do
       {:ok, conn, responses} ->
@@ -142,7 +116,6 @@ defmodule Minch.Conn do
         {:noreply, %{state | conn: conn}}
 
       {:error, conn, error, _responses} ->
-        {:ok, conn} = Mint.HTTP.close(conn)
         handle_disconnect(error, %{state | conn: conn})
 
       :unknown ->
@@ -177,7 +150,6 @@ defmodule Minch.Conn do
         callback(state, :handle_connect, [response, state.callback_state])
 
       {:error, conn, error} ->
-        {:ok, conn} = Mint.HTTP.close(conn)
         handle_disconnect(error, %{state | conn: conn})
     end
   end
@@ -190,9 +162,8 @@ defmodule Minch.Conn do
     {:noreply, state}
   end
 
-  defp handle_frame({:close, _, _} = frame, %State{} = state) do
-    {:ok, conn} = Mint.HTTP.close(state.conn)
-    handle_disconnect(frame, %{state | conn: conn})
+  defp handle_frame({:close, _, _} = frame, state) do
+    {:noreply, send_close(state, frame)}
   end
 
   defp handle_frame({:ping, data}, %State{} = state) do
@@ -205,11 +176,13 @@ defmodule Minch.Conn do
   end
 
   defp handle_disconnect(error, %State{} = state) do
+    state = close(state)
+
     case state.callback.handle_disconnect(error, state.conn_attempt, state.callback_state) do
       {:reconnect, backoff, callback_state} ->
-        if timer = state.reconnect_timer, do: Process.cancel_timer(timer)
-        timer = internal_event(:reconnect, backoff)
-        {:noreply, %{state | callback_state: callback_state, reconnect_timer: timer}}
+        cancel_timer(state.reconnect_timer)
+        reconnect_timer = internal_event(:reconnect, backoff)
+        {:noreply, %{state | callback_state: callback_state, reconnect_timer: reconnect_timer}}
 
       {:stop, reason, callback_state} ->
         {:stop, reason, %{state | callback_state: callback_state}}
@@ -229,13 +202,18 @@ defmodule Minch.Conn do
         for frame <- List.wrap(frames), do: internal_event({:send_frame, frame})
         {:noreply, %{state | callback_state: callback_state}}
 
+      {:close, code, reason, callback_state} ->
+        {:noreply, send_close(%{state | callback_state: callback_state}, {:close, code, reason})}
+
       {:stop, reason, callback_state} ->
         {:stop, reason, %{state | callback_state: callback_state}}
     end
   end
 
-  defp send_frame(%State{} = state, frame) do
-    case Mint.WebSocket.encode(state.websocket, frame) do
+  defp send_frame(%State{websocket: nil} = state, _frame), do: {:error, state, :not_connected}
+
+  defp send_frame(%State{websocket: websocket} = state, frame) do
+    case Mint.WebSocket.encode(websocket, frame) do
       {:ok, websocket, bin} ->
         case Mint.WebSocket.stream_request_body(state.conn, state.request_ref, bin) do
           {:ok, conn} ->
@@ -257,4 +235,50 @@ defmodule Minch.Conn do
   defp internal_event(message, delay) do
     Process.send_after(self(), {@internal, message}, delay)
   end
+
+  defp connect(url, headers, options) do
+    url = URI.parse(url)
+
+    path =
+      case url.path do
+        nil -> "/"
+        path -> path
+      end
+
+    path =
+      case url.query do
+        nil -> path
+        query -> path <> "?" <> query
+      end
+
+    {http_scheme, ws_scheme} =
+      case url.scheme do
+        "wss" -> {:https, :wss}
+        "ws" -> {:http, :ws}
+      end
+
+    {upgrade_opts, connect_opts} =
+      options
+      # set protocol to HTTP1 by default since WebSocket over HTTP2 is barely supported
+      |> Keyword.put_new(:protocols, [:http1])
+      |> Keyword.split([:extension])
+
+    with {:ok, conn} <- Mint.HTTP.connect(http_scheme, url.host, url.port, connect_opts) do
+      Mint.WebSocket.upgrade(ws_scheme, conn, path, headers, upgrade_opts)
+    end
+  end
+
+  defp send_close(%State{} = state, frame) do
+    send_frame(state, frame)
+    %{state | websocket: nil, close_timer: internal_event({:close_timeout, frame}, 5000)}
+  end
+
+  defp close(%State{conn: conn} = state) do
+    if conn, do: Mint.HTTP.close(conn)
+    cancel_timer(state.close_timer)
+    %{state | conn: nil, websocket: nil, request_ref: nil, close_timer: nil}
+  end
+
+  defp cancel_timer(nil), do: :ok
+  defp cancel_timer(ref), do: Process.cancel_timer(ref)
 end
