@@ -109,6 +109,10 @@ defmodule Minch.Conn do
     handle_disconnect(reason, state)
   end
 
+  def handle_info(message, %State{conn: nil} = state) do
+    callback(state, :handle_info, [message, state.callback_state])
+  end
+
   def handle_info(message, %State{} = state) do
     case Mint.WebSocket.stream(state.conn, message) do
       {:ok, conn, responses} ->
@@ -158,7 +162,7 @@ defmodule Minch.Conn do
     handle_error({:response, error}, state)
   end
 
-  defp handle_response({:done, ref}, %State{request_ref: ref} = state) do
+  defp handle_response({:done, _ref}, state) do
     {:noreply, state}
   end
 

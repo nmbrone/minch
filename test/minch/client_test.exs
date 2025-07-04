@@ -78,6 +78,7 @@ defmodule Minch.ClientTest do
   end
 
   @tag server_state: %{init_result: :unauthorized}
+  @tag client_state: %{reconnect: 1000}
   test "handle_disconnect/2 is called after upgrading error" do
     assert_receive {:client, :handle_disconnect,
                     [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 1, _]}
