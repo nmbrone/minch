@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/nmbrone/minch/compare/v0.2.0...v0.2.1) (2025-07-04)
+
+
+### Bug Fixes
+
+* properly handle :done message ([#55](https://github.com/nmbrone/minch/issues/55)) ([a1e597a](https://github.com/nmbrone/minch/commit/a1e597a850aa9f85c141bde4444f202ed4524e19))
+
 ## [0.2.0](https://github.com/nmbrone/minch/compare/v0.1.0...v0.2.0) (2025-06-11)
 
 
