@@ -27,7 +27,7 @@ jobs:
           manifest-file: .github/release-please/manifest.json
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         if: ${{ steps.release.outputs.release_created }}
 
       - name: Tag major and minor versions
