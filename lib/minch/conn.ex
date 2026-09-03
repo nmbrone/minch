@@ -264,7 +264,7 @@ defmodule Minch.Conn do
       options
       # set protocol to HTTP1 by default since WebSocket over HTTP2 is barely supported
       |> Keyword.put_new(:protocols, [:http1])
-      |> Keyword.split([:extension])
+      |> Keyword.split([:extensions])
 
     with {:ok, conn} <- Mint.HTTP.connect(http_scheme, url.host, url.port, connect_opts) do
       Mint.WebSocket.upgrade(ws_scheme, conn, path, headers, upgrade_opts)
