@@ -118,13 +118,13 @@ defmodule Minch.Conn do
     end
   end
 
-  defp handle_each(items, state, fun) do
-    Enum.reduce_while(items, {:noreply, state}, fn item, {:noreply, state} ->
-      case fun.(item, state) do
-        {:noreply, _} = result -> {:cont, result}
-        {:stop, _, _} = result -> {:halt, result}
-      end
-    end)
+  defp handle_each([], state, _fun), do: {:noreply, state}
+
+  defp handle_each([item | rest], state, fun) do
+    case fun.(item, state) do
+      {:noreply, state} -> handle_each(rest, state, fun)
+      {:stop, _, _} = stop -> stop
+    end
   end
 
   defp handle_response({:data, _, _}, %State{websocket: nil} = state) do
