@@ -116,6 +116,20 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_frame, [{:pong, "123"}, _state]}
   end
 
+  test "handle_frame/2 is called with frames received before a close", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the frames and the socket close land in the mailbox together
+    :sys.suspend(ctx.client)
+    Server.send_frame(ctx.server, [{:text, "a"}, {:text, "b"}, {:close, 1000, "bye"}])
+    assert_receive {:server, :terminate, _}
+    # cowboy terminates before the FIN reaches the client, and nothing signals it
+    Process.sleep(5)
+    :sys.resume(ctx.client)
+    assert_receive {:client, :handle_frame, [{:text, "a"}, _state]}
+    assert_receive {:client, :handle_frame, [{:text, "b"}, _state]}
+    assert_receive {:client, :handle_disconnect, _}
+  end
+
   test "handle_info/2 is called with an arbitrary message", ctx do
     send(ctx.client, "hello")
     assert_receive {:client, :handle_info, ["hello", _state]}
