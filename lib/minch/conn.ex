@@ -67,13 +67,13 @@ defmodule Minch.Conn do
 
     case connect(url, headers, options) do
       {:ok, conn, ref} ->
-        {:noreply, %{state | conn: conn, conn_attempt: 1, request_ref: ref}}
+        {:noreply, %{state | conn: conn, request_ref: ref}}
 
       {:error, error} ->
-        handle_disconnect(error, %{state | conn_attempt: state.conn_attempt + 1})
+        handle_disconnect(error, state)
 
       {:error, conn, error} ->
-        handle_disconnect(error, %{state | conn_attempt: state.conn_attempt + 1, conn: conn})
+        handle_disconnect(error, %{state | conn: conn})
     end
   end
 
@@ -149,7 +149,7 @@ defmodule Minch.Conn do
   defp handle_response({:headers, ref, headers}, %State{request_ref: ref} = state) do
     case Mint.WebSocket.new(state.conn, ref, state.response_status, headers) do
       {:ok, conn, websocket} ->
-        state = %{state | conn: conn, websocket: websocket}
+        state = %{state | conn: conn, websocket: websocket, conn_attempt: 0}
         response = %{status: state.response_status, headers: headers}
         callback(state, :handle_connect, [response, state.callback_state])
 
@@ -180,7 +180,7 @@ defmodule Minch.Conn do
   end
 
   defp handle_disconnect(error, %State{} = state) do
-    state = close(state)
+    state = close(%{state | conn_attempt: state.conn_attempt + 1})
 
     case state.callback.handle_disconnect(error, state.conn_attempt, state.callback_state) do
       {:reconnect, backoff, callback_state} ->
