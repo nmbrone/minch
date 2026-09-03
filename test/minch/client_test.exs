@@ -78,10 +78,13 @@ defmodule Minch.ClientTest do
   end
 
   @tag server_state: %{init_result: :unauthorized}
-  @tag client_state: %{reconnect: 1000}
+  @tag client_state: %{reconnect: 10}
   test "handle_disconnect/2 is called after upgrading error" do
     assert_receive {:client, :handle_disconnect,
                     [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 1, _]}
+
+    assert_receive {:client, :handle_disconnect,
+                    [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 2, _]}
   end
 
   test "handle_disconnect/2 is called after connection failed" do
@@ -135,10 +138,16 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_info, ["hello", _state]}
   end
 
+  @tag client_state: %{reconnect: 10}
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
     assert_receive {:client, :handle_connect, _}
     Server.send_frame(ctx.server, :close)
-    assert_receive {:client, :handle_disconnect, _}
+    assert_receive {:client, :handle_disconnect, [_reason, 1, _state]}
+
+    assert_receive {:server, :init, server}
+    assert_receive {:client, :handle_connect, _}
+    Server.send_frame(server, :close)
+    assert_receive {:client, :handle_disconnect, [_reason, 1, _state]}
   end
 
   test "connection is properly closed and terminate/2 is called", ctx do
