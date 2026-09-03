@@ -86,14 +86,6 @@ defmodule Minch.Conn do
   end
 
   @impl true
-  def handle_info({@internal, {:handle_response, msg}}, state) do
-    handle_response(msg, state)
-  end
-
-  def handle_info({@internal, {:handle_frame, frame}}, state) do
-    handle_frame(frame, state)
-  end
-
   def handle_info({@internal, {:send_frame, frame}}, state) do
     case send_frame(state, frame) do
       {:ok, state} -> {:noreply, state}
@@ -116,14 +108,22 @@ defmodule Minch.Conn do
   def handle_info(message, %State{} = state) do
     case Mint.WebSocket.stream(state.conn, message) do
       {:ok, conn, responses} ->
-        for msg <- responses, do: internal_event({:handle_response, msg})
-        {:noreply, %{state | conn: conn}}
+        handle_each(responses, %{state | conn: conn}, &handle_response/2)
 
       {:error, conn, error, _responses} ->
         handle_disconnect(error, %{state | conn: conn})
 
       :unknown ->
         callback(state, :handle_info, [message, state.callback_state])
+    end
+  end
+
+  defp handle_each([], state, _fun), do: {:noreply, state}
+
+  defp handle_each([item | rest], state, fun) do
+    case fun.(item, state) do
+      {:noreply, state} -> handle_each(rest, state, fun)
+      {:stop, _, _} = stop -> stop
     end
   end
 
@@ -134,8 +134,7 @@ defmodule Minch.Conn do
   defp handle_response({:data, ref, data}, %State{request_ref: ref} = state) do
     case Mint.WebSocket.decode(state.websocket, data) do
       {:ok, websocket, frames} ->
-        for frame <- frames, do: internal_event({:handle_frame, frame})
-        {:noreply, %{state | websocket: websocket}}
+        handle_each(frames, %{state | websocket: websocket}, &handle_frame/2)
 
       {:error, websocket, error} ->
         handle_error({:decode_frame, error}, %{state | websocket: websocket})
