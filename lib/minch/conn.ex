@@ -273,6 +273,7 @@ defmodule Minch.Conn do
 
   defp send_close(%State{} = state, frame) do
     send_frame(state, frame)
+    cancel_timer(state.close_timer)
     %{state | websocket: nil, close_timer: internal_event({:close_timeout, frame}, 5000)}
   end
 
