@@ -87,6 +87,12 @@ defmodule Minch.ClientTest do
                     [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 2, _]}
   end
 
+  @tag client_state: %{options: [extensions: [Mint.WebSocket.PerMessageDeflate]]}
+  test "connect/1 options are passed to the upgrade" do
+    assert_receive {:server, :request,
+                    %{headers: %{"sec-websocket-extensions" => "permessage-deflate"}}}
+  end
+
   test "handle_disconnect/2 is called after connection failed" do
     Client.start_link(%{receiver: self(), url: "ws://example.test", reconnect: 50})
 
