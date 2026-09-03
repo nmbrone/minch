@@ -8,6 +8,7 @@ defmodule Minch do
   @type state :: term()
   @type response :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
   @type frame :: Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()
+  @type option :: {:close_timeout, non_neg_integer()} | GenServer.option()
 
   @type callback_result ::
           {:ok, state()}
@@ -44,6 +45,9 @@ defmodule Minch do
   @doc """
   Invoked to handle a disconnect from the server or a failed connection attempt.
 
+  The reason is the `{:close, code, reason}` frame whenever a close handshake was started by
+  either side, and a `t:Mint.WebSocket.error/0` otherwise.
+
   Returning `{:reconnect, backoff, state}` will schedule a reconnect after `backoff` milliseconds.
   """
   @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state()) ::
@@ -68,8 +72,13 @@ defmodule Minch do
 
   @doc """
   Starts a `Minch` client process linked to the current process.
+
+  Accepts `GenServer` options and:
+
+    * `:close_timeout` - how long to wait, in milliseconds, for the server to close the
+      connection after a close handshake has started. Defaults to `5000`.
   """
-  @spec start_link(module(), term(), GenServer.options()) :: GenServer.on_start()
+  @spec start_link(module(), term(), [option()]) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
     Minch.Conn.start_link(module, init_arg, opts)
   end
