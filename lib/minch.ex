@@ -127,11 +127,8 @@ defmodule Minch do
   @doc """
   Sends a WebSocket frame.
 
-  Sending a close frame starts the close handshake: further frames are rejected with
-  `{:error, :closing}`, incoming frames are still delivered to `c:handle_frame/2`, and
-  `c:handle_disconnect/3` is invoked with that frame once the server answers or
-  `:close_timeout` elapses. Note that the default `c:handle_disconnect/3` implementation
-  reconnects.
+  A close frame starts the close handshake; frames sent after it are rejected with
+  `{:error, :closing}`.
   """
   @spec send_frame(client(), frame()) :: :ok | {:error, send_error()}
   def send_frame(client, frame) do

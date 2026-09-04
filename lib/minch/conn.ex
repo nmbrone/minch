@@ -238,13 +238,8 @@ defmodule Minch.Conn do
   defp handle_send({:error, state, error}), do: handle_error(error, state)
 
   defp handle_close({:ok, state}), do: {:noreply, state}
-
-  # nothing was sent: there is no connection, or a handshake is already in flight
-  defp handle_close({:error, state, reason}) when reason in [:not_connected, :closing] do
-    {:noreply, state}
-  end
-
-  # unlike an ordinary send error, a close that can't be sent still tears the connection down
+  defp handle_close({:error, state, :not_connected}), do: {:noreply, state}
+  defp handle_close({:error, state, :closing}), do: {:noreply, state}
   defp handle_close({:error, state, error}), do: handle_disconnect(error, state)
 
   defp discard_error({:ok, state}), do: state
@@ -253,7 +248,6 @@ defmodule Minch.Conn do
   defp send_frame(state, {:close, _, _} = frame), do: send_close(state, frame)
   defp send_frame(state, :close = frame), do: send_close(state, frame)
   defp send_frame(%State{close_frame: nil} = state, frame), do: stream_frame(state, frame)
-  # no frame may follow the close frame that started the handshake
   defp send_frame(state, _frame), do: {:error, state, :closing}
 
   defp stream_frame(%State{websocket: nil} = state, _frame) do
