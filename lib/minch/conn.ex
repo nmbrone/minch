@@ -316,10 +316,8 @@ defmodule Minch.Conn do
     end
   end
 
-  # only one close handshake at a time
   defp send_close(state, _frame), do: {:error, state, :closing}
 
-  # Mint decodes a payload-less close as 1000/"", so report our shorthand the same way
   defp normalize_close(:close), do: {:close, 1000, ""}
   defp normalize_close(frame), do: frame
 
