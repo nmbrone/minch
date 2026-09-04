@@ -13,19 +13,24 @@ defmodule Minch.Conn do
     :callback,
     :callback_state,
     :reconnect_timer,
-    :close_timer
+    :close_timer,
+    :close_frame,
+    :close_timeout
   ]
 
+  @options [:close_timeout]
   @internal :"$minch"
 
-  @spec start_link(module(), term(), GenServer.options()) :: GenServer.on_start()
+  @spec start_link(module(), term(), [Minch.option()]) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
-    GenServer.start_link(__MODULE__, {module, init_arg}, opts)
+    {opts, gen_opts} = Keyword.split(opts, @options)
+    GenServer.start_link(__MODULE__, {module, init_arg, opts}, gen_opts)
   end
 
-  @spec start(module(), term(), GenServer.options()) :: GenServer.on_start()
+  @spec start(module(), term(), [Minch.option()]) :: GenServer.on_start()
   def start(module, init_arg, opts \\ []) do
-    GenServer.start(__MODULE__, {module, init_arg}, opts)
+    {opts, gen_opts} = Keyword.split(opts, @options)
+    GenServer.start(__MODULE__, {module, init_arg, opts}, gen_opts)
   end
 
   @spec stop(GenServer.server()) :: :ok
@@ -34,10 +39,16 @@ defmodule Minch.Conn do
   end
 
   @impl true
-  def init({callback, init_arg}) do
+  def init({callback, init_arg, opts}) do
     case callback.init(init_arg) do
       {:ok, callback_state} ->
-        state = %State{callback: callback, callback_state: callback_state, conn_attempt: 0}
+        state = %State{
+          callback: callback,
+          callback_state: callback_state,
+          close_timeout: Keyword.get(opts, :close_timeout, 5000),
+          conn_attempt: 0
+        }
+
         Process.flag(:trap_exit, true)
         {:ok, state, {:continue, :connect}}
 
@@ -97,8 +108,12 @@ defmodule Minch.Conn do
     {:noreply, %{state | reconnect_timer: nil}, {:continue, :connect}}
   end
 
-  def handle_info({@internal, {:close_timeout, reason}}, state) do
-    handle_disconnect(reason, state)
+  def handle_info({@internal, :close_timeout}, %State{close_timer: nil} = state) do
+    {:noreply, state}
+  end
+
+  def handle_info({@internal, :close_timeout}, state) do
+    handle_disconnect(state.close_frame, state)
   end
 
   def handle_info(message, %State{conn: nil} = state) do
@@ -179,9 +194,10 @@ defmodule Minch.Conn do
   end
 
   defp handle_disconnect(error, %State{} = state) do
+    reason = state.close_frame || error
     state = close(%{state | conn_attempt: state.conn_attempt + 1})
 
-    case state.callback.handle_disconnect(error, state.conn_attempt, state.callback_state) do
+    case state.callback.handle_disconnect(reason, state.conn_attempt, state.callback_state) do
       {:reconnect, backoff, callback_state} ->
         cancel_timer(state.reconnect_timer)
         reconnect_timer = internal_event(:reconnect, backoff)
@@ -273,13 +289,15 @@ defmodule Minch.Conn do
 
   defp send_close(%State{} = state, frame) do
     send_frame(state, frame)
-    %{state | websocket: nil, close_timer: internal_event({:close_timeout, frame}, 5000)}
+    cancel_timer(state.close_timer)
+    close_timer = internal_event(:close_timeout, state.close_timeout)
+    %{state | websocket: nil, close_timer: close_timer, close_frame: frame}
   end
 
   defp close(%State{conn: conn} = state) do
     if conn, do: Mint.HTTP.close(conn)
     cancel_timer(state.close_timer)
-    %{state | conn: nil, websocket: nil, request_ref: nil, close_timer: nil}
+    %{state | conn: nil, websocket: nil, request_ref: nil, close_timer: nil, close_frame: nil}
   end
 
   defp cancel_timer(nil), do: :ok

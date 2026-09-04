@@ -5,7 +5,7 @@ defmodule Minch.ClientTest do
     use Minch, restart: :transient
 
     def start_link(state) do
-      Minch.start_link(__MODULE__, state)
+      Minch.start_link(__MODULE__, state, state[:opts] || [])
     end
 
     def connect(state) do
@@ -147,13 +147,23 @@ defmodule Minch.ClientTest do
   @tag client_state: %{reconnect: 10}
   test "handle_disconnect/2 is called when received a :close frame from server", ctx do
     assert_receive {:client, :handle_connect, _}
-    Server.send_frame(ctx.server, :close)
-    assert_receive {:client, :handle_disconnect, [_reason, 1, _state]}
+    Server.send_frame(ctx.server, {:close, 4001, "policy"})
+    assert_receive {:client, :handle_disconnect, [{:close, 4001, "policy"}, 1, _state]}
 
     assert_receive {:server, :init, server}
     assert_receive {:client, :handle_connect, _}
     Server.send_frame(server, :close)
     assert_receive {:client, :handle_disconnect, [_reason, 1, _state]}
+  end
+
+  @tag client_state: %{opts: [close_timeout: 50]}
+  test "handle_disconnect/2 is called when the close handshake is left unanswered", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the server never reads our close frame, and never closes the socket
+    :sys.suspend(ctx.server)
+    send(ctx.client, {:close, 1000, "bye"})
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}
+    :sys.resume(ctx.server)
   end
 
   test "connection is properly closed and terminate/2 is called", ctx do
@@ -172,7 +182,7 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_connect, _}
     send(ctx.client, {:close, 1000, "bye"})
     assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
-    assert_receive {:client, :handle_disconnect, [%Mint.TransportError{reason: :closed}, 1, _]}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _]}
   end
 
   test "stops the client process by returning a :stop tuple from a callback", ctx do
