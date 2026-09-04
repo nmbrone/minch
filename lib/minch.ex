@@ -9,6 +9,7 @@ defmodule Minch do
   @type response :: %{status: Mint.Types.status(), headers: Mint.Types.headers()}
   @type frame :: Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()
   @type option :: {:close_timeout, non_neg_integer()} | GenServer.option()
+  @type error :: Mint.WebSocket.error() | {:invalid_scheme, String.t() | nil}
 
   @type callback_result ::
           {:ok, state()}
@@ -46,9 +47,11 @@ defmodule Minch do
   Invoked to handle a disconnect from the server or a failed connection attempt.
 
   The reason is the `{:close, code, reason}` frame whenever a close handshake was started by
-  either side, and a `t:Mint.WebSocket.error/0` otherwise.
+  either side, and a `t:error/0` otherwise.
 
   Returning `{:reconnect, backoff, state}` will schedule a reconnect after `backoff` milliseconds.
+  A reason like `{:invalid_scheme, scheme}` will never resolve on a retry, so return
+  `{:stop, reason, state}` for those.
   """
   @callback handle_disconnect(reason :: term(), attempt :: pos_integer(), state()) ::
               {:reconnect, backoff :: pos_integer(), state()}
@@ -107,7 +110,7 @@ defmodule Minch do
       :ok
   """
   @spec connect(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
-          {:ok, pid(), Mint.Types.request_ref()} | {:error, Mint.WebSocket.error()}
+          {:ok, pid(), Mint.Types.request_ref()} | {:error, error() | :timeout}
   def connect(url, headers \\ [], options \\ []) do
     Minch.SimpleClient.start(url, headers, options)
   end
