@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2](https://github.com/nmbrone/minch/compare/v0.2.1...v0.2.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* count reconnect attempts across failed handshakes ([#89](https://github.com/nmbrone/minch/issues/89)) ([45b70be](https://github.com/nmbrone/minch/commit/45b70be30a7ab7d4d9ce3ebf985c3c1cbdcfe166))
+* deliver frames received right before a connection close ([#88](https://github.com/nmbrone/minch/issues/88)) ([0a58982](https://github.com/nmbrone/minch/commit/0a58982851ee56eb8f55b34a85e0d60fdf48513d))
+* forward the :extensions option to the upgrade ([#91](https://github.com/nmbrone/minch/issues/91)) ([f1916f9](https://github.com/nmbrone/minch/commit/f1916f98017e8cc783e2b7a9675aa6b9af92a329))
+* report an invalid URL scheme instead of crashing ([#94](https://github.com/nmbrone/minch/issues/94)) ([5336598](https://github.com/nmbrone/minch/commit/53365986771d816348d4e5967368df056fb4357c))
+* report the close frame as the disconnect reason ([#92](https://github.com/nmbrone/minch/issues/92)) ([c2fb6f6](https://github.com/nmbrone/minch/commit/c2fb6f64349a09ac540c7174d9ff709f45eb4eb6))
+
 ## [0.2.1](https://github.com/nmbrone/minch/compare/v0.2.0...v0.2.1) (2025-07-04)
 
 
