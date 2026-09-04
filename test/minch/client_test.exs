@@ -222,6 +222,20 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _]}
   end
 
+  @tag client_state: %{reconnect: 10}
+  test "starts the close handshake for a :close frame replied from a callback", ctx do
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:reply, {:close, 1000, "bye"}})
+    assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}
+
+    assert_receive {:server, :init, _}
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:reply, :close})
+    assert_receive {:server, :terminate, :remote}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, ""}, 1, _state]}
+  end
+
   test "stops the client process by returning a :stop tuple from a callback", ctx do
     assert_receive {:client, :handle_connect, _}
     send(ctx.client, {:stop, :normal})
