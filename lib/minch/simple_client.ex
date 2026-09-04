@@ -7,7 +7,7 @@ defmodule Minch.SimpleClient do
   defstruct [:url, :headers, :options, :receiver, :receiver_ref, :monitor_ref, :connected?]
 
   @spec start(String.t() | URI.t(), Mint.Types.headers(), Keyword.t()) ::
-          {:ok, pid(), reference()} | {:error, Mint.WebSocket.error() | :timeout}
+          {:ok, pid(), reference()} | {:error, Minch.error() | :timeout}
   def start(url, headers \\ [], options \\ []) do
     # the default timeout is 30_000
     # https://hexdocs.pm/mint/Mint.HTTP.html#connect/4-transport-options

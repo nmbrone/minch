@@ -270,22 +270,21 @@ defmodule Minch.Conn do
         query -> path <> "?" <> query
       end
 
-    {http_scheme, ws_scheme} =
-      case url.scheme do
-        "wss" -> {:https, :wss}
-        "ws" -> {:http, :ws}
-      end
-
     {upgrade_opts, connect_opts} =
       options
       # set protocol to HTTP1 by default since WebSocket over HTTP2 is barely supported
       |> Keyword.put_new(:protocols, [:http1])
       |> Keyword.split([:extensions])
 
-    with {:ok, conn} <- Mint.HTTP.connect(http_scheme, url.host, url.port, connect_opts) do
+    with {:ok, http_scheme, ws_scheme} <- schemes(url.scheme),
+         {:ok, conn} <- Mint.HTTP.connect(http_scheme, url.host, url.port, connect_opts) do
       Mint.WebSocket.upgrade(ws_scheme, conn, path, headers, upgrade_opts)
     end
   end
+
+  defp schemes("ws"), do: {:ok, :http, :ws}
+  defp schemes("wss"), do: {:ok, :https, :wss}
+  defp schemes(scheme), do: {:error, {:invalid_scheme, scheme}}
 
   defp send_close(%State{} = state, frame) do
     send_frame(state, frame)

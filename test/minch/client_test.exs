@@ -103,6 +103,12 @@ defmodule Minch.ClientTest do
                     [%Mint.TransportError{reason: :nxdomain}, 2, _state]}
   end
 
+  test "handle_disconnect/2 is called for a url with an unsupported scheme" do
+    Client.start_link(%{receiver: self(), url: "http://localhost", reconnect: 50})
+    assert_receive {:client, :handle_disconnect, [{:invalid_scheme, "http"}, 1, _state]}
+    assert_receive {:client, :handle_disconnect, [{:invalid_scheme, "http"}, 2, _state]}
+  end
+
   test "replies from a callback", ctx do
     assert_receive {:client, :handle_connect, _}
     send(ctx.client, {:reply, :ping})
