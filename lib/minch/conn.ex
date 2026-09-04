@@ -62,8 +62,7 @@ defmodule Minch.Conn do
 
   @impl true
   def terminate(reason, %State{} = state) do
-    send_frame(state, :close)
-    state = close(state)
+    state = state |> send_frame(:close) |> discard_error() |> close()
     state.callback.terminate(reason, state.callback_state)
   end
 
@@ -98,10 +97,7 @@ defmodule Minch.Conn do
 
   @impl true
   def handle_info({@internal, {:send_frame, frame}}, state) do
-    case send_frame(state, frame) do
-      {:ok, state} -> {:noreply, state}
-      {:error, state, error} -> handle_error(error, state)
-    end
+    state |> send_frame(frame) |> handle_send()
   end
 
   def handle_info({@internal, :reconnect}, %State{} = state) do
@@ -180,13 +176,20 @@ defmodule Minch.Conn do
     {:noreply, state}
   end
 
-  defp handle_frame({:close, _, _} = frame, state) do
-    {:noreply, send_close(state, frame)}
+  # the server initiated close
+  defp handle_frame({:close, _, _} = frame, %State{close_frame: nil} = state) do
+    state = state |> stream_frame(frame) |> discard_error()
+    handle_disconnect(frame, state)
   end
 
+  # the server answered our close frame
+  defp handle_frame({:close, _, _}, %State{} = state) do
+    handle_disconnect(state.close_frame, state)
+  end
+
+  # a ping must be answered even after we have sent a close frame
   defp handle_frame({:ping, data}, %State{} = state) do
-    internal_event({:send_frame, {:pong, data}})
-    {:noreply, state}
+    state |> stream_frame({:pong, data}) |> handle_send()
   end
 
   defp handle_frame(frame, %State{} = data) do
@@ -222,16 +225,42 @@ defmodule Minch.Conn do
         {:noreply, %{state | callback_state: callback_state}}
 
       {:close, code, reason, callback_state} ->
-        {:noreply, send_close(%{state | callback_state: callback_state}, {:close, code, reason})}
+        %{state | callback_state: callback_state}
+        |> send_close({:close, code, reason})
+        |> handle_close()
 
       {:stop, reason, callback_state} ->
         {:stop, reason, %{state | callback_state: callback_state}}
     end
   end
 
-  defp send_frame(%State{websocket: nil} = state, _frame), do: {:error, state, :not_connected}
+  defp handle_send({:ok, state}), do: {:noreply, state}
+  defp handle_send({:error, state, error}), do: handle_error(error, state)
 
-  defp send_frame(%State{websocket: websocket} = state, frame) do
+  defp handle_close({:ok, state}), do: {:noreply, state}
+
+  # nothing was sent: there is no connection, or a handshake is already in flight
+  defp handle_close({:error, state, reason}) when reason in [:not_connected, :closing] do
+    {:noreply, state}
+  end
+
+  # unlike an ordinary send error, a close that can't be sent still tears the connection down
+  defp handle_close({:error, state, error}), do: handle_disconnect(error, state)
+
+  defp discard_error({:ok, state}), do: state
+  defp discard_error({:error, state, _error}), do: state
+
+  defp send_frame(state, {:close, _, _} = frame), do: send_close(state, frame)
+  defp send_frame(state, :close = frame), do: send_close(state, frame)
+  defp send_frame(%State{close_frame: nil} = state, frame), do: stream_frame(state, frame)
+  # no frame may follow the close frame that started the handshake
+  defp send_frame(state, _frame), do: {:error, state, :closing}
+
+  defp stream_frame(%State{websocket: nil} = state, _frame) do
+    {:error, state, :not_connected}
+  end
+
+  defp stream_frame(%State{websocket: websocket} = state, frame) do
     case Mint.WebSocket.encode(websocket, frame) do
       {:ok, websocket, bin} ->
         case Mint.WebSocket.stream_request_body(state.conn, state.request_ref, bin) do
@@ -286,12 +315,19 @@ defmodule Minch.Conn do
   defp schemes("wss"), do: {:ok, :https, :wss}
   defp schemes(scheme), do: {:error, {:invalid_scheme, scheme}}
 
-  defp send_close(%State{} = state, frame) do
-    send_frame(state, frame)
-    cancel_timer(state.close_timer)
-    close_timer = internal_event(:close_timeout, state.close_timeout)
-    %{state | websocket: nil, close_timer: close_timer, close_frame: frame}
+  defp send_close(%State{close_frame: nil} = state, frame) do
+    with {:ok, state} <- stream_frame(state, frame) do
+      close_timer = internal_event(:close_timeout, state.close_timeout)
+      {:ok, %{state | close_timer: close_timer, close_frame: normalize_close(frame)}}
+    end
   end
+
+  # only one close handshake at a time
+  defp send_close(state, _frame), do: {:error, state, :closing}
+
+  # Mint decodes a payload-less close as 1000/"", so report our shorthand the same way
+  defp normalize_close(:close), do: {:close, 1000, ""}
+  defp normalize_close(frame), do: frame
 
   defp close(%State{conn: conn} = state) do
     if conn, do: Mint.HTTP.close(conn)

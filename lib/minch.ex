@@ -10,6 +10,7 @@ defmodule Minch do
   @type frame :: Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()
   @type option :: {:close_timeout, non_neg_integer()} | GenServer.option()
   @type error :: Mint.WebSocket.error() | {:invalid_scheme, String.t() | nil}
+  @type send_error :: :not_connected | :closing | Mint.WebSocket.error()
 
   @type callback_result ::
           {:ok, state()}
@@ -125,9 +126,14 @@ defmodule Minch do
 
   @doc """
   Sends a WebSocket frame.
+
+  Sending a close frame starts the close handshake: further frames are rejected with
+  `{:error, :closing}`, incoming frames are still delivered to `c:handle_frame/2`, and
+  `c:handle_disconnect/3` is invoked with that frame once the server answers or
+  `:close_timeout` elapses. Note that the default `c:handle_disconnect/3` implementation
+  reconnects.
   """
-  @spec send_frame(client(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
-          :ok | {:error, term()}
+  @spec send_frame(client(), frame()) :: :ok | {:error, send_error()}
   def send_frame(client, frame) do
     GenServer.call(client, {:send_frame, frame})
   end
