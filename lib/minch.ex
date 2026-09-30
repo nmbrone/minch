@@ -79,8 +79,8 @@ defmodule Minch do
 
   Accepts `GenServer` options and:
 
-    * `:close_timeout` - how long to wait, in milliseconds, for the server to close the
-      connection after a close handshake has started. Defaults to `5000`.
+    * `:close_timeout` - how long to wait, in milliseconds, for the server to answer a
+      close frame sent by the client. Defaults to `5000`.
   """
   @spec start_link(module(), term(), [option()]) :: GenServer.on_start()
   def start_link(module, init_arg, opts \\ []) do
