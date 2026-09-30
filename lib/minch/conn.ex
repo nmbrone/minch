@@ -96,10 +96,6 @@ defmodule Minch.Conn do
   end
 
   @impl true
-  def handle_info({@internal, {:send_frame, frame}}, state) do
-    state |> send_frame(frame) |> handle_send()
-  end
-
   def handle_info({@internal, :reconnect}, %State{} = state) do
     {:noreply, %{state | reconnect_timer: nil}, {:continue, :connect}}
   end
@@ -130,13 +126,16 @@ defmodule Minch.Conn do
   end
 
   defp handle_each([], state, _fun), do: {:noreply, state}
-  defp handle_each(_items, %State{conn: nil} = state, _fun), do: {:noreply, state}
 
   defp handle_each([item | rest], state, fun) do
     case fun.(item, state) do
       {:noreply, state} -> handle_each(rest, state, fun)
       {:stop, _, _} = stop -> stop
     end
+  end
+
+  defp handle_response(_response, %State{conn: nil} = state) do
+    {:noreply, state}
   end
 
   defp handle_response({:data, _, _}, %State{websocket: nil} = state) do
@@ -176,6 +175,8 @@ defmodule Minch.Conn do
   defp handle_response({:done, _ref}, state) do
     {:noreply, state}
   end
+
+  defp handle_frame(_frame, %State{conn: nil} = state), do: {:noreply, state}
 
   # the server initiated close
   defp handle_frame({:close, _, _} = frame, %State{close_frame: nil} = state) do
@@ -222,8 +223,9 @@ defmodule Minch.Conn do
         {:noreply, %{state | callback_state: callback_state}}
 
       {:reply, frames, callback_state} ->
-        for frame <- List.wrap(frames), do: internal_event({:send_frame, frame})
-        {:noreply, %{state | callback_state: callback_state}}
+        frames
+        |> List.wrap()
+        |> handle_each(%{state | callback_state: callback_state}, &send_reply/2)
 
       {:close, code, reason, callback_state} ->
         %{state | callback_state: callback_state}
@@ -234,6 +236,8 @@ defmodule Minch.Conn do
         {:stop, reason, %{state | callback_state: callback_state}}
     end
   end
+
+  defp send_reply(frame, state), do: state |> send_frame(frame) |> handle_send()
 
   defp handle_send({:ok, state}), do: {:noreply, state}
   defp handle_send({:error, state, error}), do: handle_error(error, state)
@@ -269,10 +273,6 @@ defmodule Minch.Conn do
       {:error, websocket, error} ->
         {:error, %{state | websocket: websocket}, error}
     end
-  end
-
-  defp internal_event(message) do
-    send(self(), {@internal, message})
   end
 
   defp internal_event(message, delay) do
