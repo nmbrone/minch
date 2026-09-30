@@ -181,6 +181,10 @@ defmodule Minch.Conn do
 
   defp handle_frame(_frame, %State{conn: nil} = state), do: {:noreply, state}
 
+  defp handle_frame({:error, reason}, %State{} = state) do
+    handle_error({:decode_frame, reason}, state)
+  end
+
   # the server initiated close
   defp handle_frame({:close, _, _} = frame, %State{close_frame: nil} = state) do
     state = state |> stream_frame(frame) |> discard_error()
