@@ -115,6 +115,17 @@ defmodule Minch.ClientTest do
     assert_receive {:server, :frame, :ping}
   end
 
+  test "frames replied from a callback are sent before an already queued call", ctx do
+    assert_receive {:client, :handle_connect, _}
+    :sys.suspend(ctx.client)
+    send(ctx.client, {:reply, {:text, "a"}})
+    :gen_server.send_request(ctx.client, {:send_frame, {:text, "b"}})
+    :sys.resume(ctx.client)
+    assert_receive {:server, :frame, first}
+    assert_receive {:server, :frame, second}
+    assert {first, second} == {{:text, "a"}, {:text, "b"}}
+  end
+
   test "sends pong to server ping automatically", ctx do
     assert_receive {:client, :handle_connect, _}
     Server.send_frame(ctx.server, {:ping, "123"})
