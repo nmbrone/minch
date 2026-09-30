@@ -262,6 +262,18 @@ defmodule Minch.ClientTest do
   end
 
   @tag client_state: %{opts: [close_timeout: 200]}
+  test "a :close frame replied during the close handshake is ignored", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the server never answers our close frame
+    :sys.suspend(ctx.server)
+    assert :ok = Minch.send_frame(ctx.client, {:close, 1000, "bye"})
+    send(ctx.client, {:reply, {:close, 1001, "again"}})
+    refute_receive {:client, :handle_error, _}, 50
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}, 300
+    :sys.resume(ctx.server)
+  end
+
+  @tag client_state: %{opts: [close_timeout: 200]}
   test "a :close result during the close handshake is ignored", ctx do
     assert_receive {:client, :handle_connect, _}
     # suspended so the server never answers our close frame

@@ -237,6 +237,8 @@ defmodule Minch.Conn do
     end
   end
 
+  defp send_reply({:close, _, _} = frame, state), do: state |> send_frame(frame) |> handle_close()
+  defp send_reply(:close = frame, state), do: state |> send_frame(frame) |> handle_close()
   defp send_reply(frame, state), do: state |> send_frame(frame) |> handle_send()
 
   defp handle_send({:ok, state}), do: {:noreply, state}
