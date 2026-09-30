@@ -130,6 +130,7 @@ defmodule Minch.Conn do
   end
 
   defp handle_each([], state, _fun), do: {:noreply, state}
+  defp handle_each(_items, %State{conn: nil} = state, _fun), do: {:noreply, state}
 
   defp handle_each([item | rest], state, fun) do
     case fun.(item, state) do
