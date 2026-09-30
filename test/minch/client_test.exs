@@ -184,11 +184,78 @@ defmodule Minch.ClientTest do
     assert {:error, :not_connected} = Minch.send_frame(pid, {:text, "hello"})
   end
 
+  test "starts the close handshake for a :close frame sent with send_frame/2", ctx do
+    assert_receive {:client, :handle_connect, _}
+    assert :ok = Minch.send_frame(ctx.client, {:close, 1000, "bye"})
+    assert {:error, :closing} = Minch.send_frame(ctx.client, {:text, "hello"})
+    assert {:error, :closing} = Minch.send_frame(ctx.client, {:close, 1001, "again"})
+    assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _]}
+  end
+
+  test "handle_frame/2 is called with frames received after sending a :close frame", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the frames are queued ahead of our close frame in the server's mailbox
+    :sys.suspend(ctx.server)
+    Server.send_frame(ctx.server, [{:text, "a"}, {:text, "b"}])
+    assert :ok = Minch.send_frame(ctx.client, {:close, 1000, "bye"})
+    :sys.resume(ctx.server)
+    assert_receive {:client, :handle_frame, [{:text, "a"}, _state]}
+    assert_receive {:client, :handle_frame, [{:text, "b"}, _state]}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}
+  end
+
+  @tag client_state: %{opts: [close_timeout: 50]}
+  test "send_frame/2 with a :close frame arms the close timeout", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the server never reads our close frame, and never closes the socket
+    :sys.suspend(ctx.server)
+    assert :ok = Minch.send_frame(ctx.client, :close)
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, ""}, 1, _state]}
+    :sys.resume(ctx.server)
+  end
+
   test "gracefully closes the connection by returning a :close tuple from a callback", ctx do
     assert_receive {:client, :handle_connect, _}
     send(ctx.client, {:close, 1000, "bye"})
     assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
     assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _]}
+  end
+
+  @tag client_state: %{reconnect: 10}
+  test "starts the close handshake for a :close frame replied from a callback", ctx do
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:reply, {:close, 1000, "bye"}})
+    assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}
+
+    assert_receive {:server, :init, _}
+    assert_receive {:client, :handle_connect, _}
+    send(ctx.client, {:reply, :close})
+    assert_receive {:server, :terminate, :remote}
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, ""}, 1, _state]}
+  end
+
+  @tag client_state: %{opts: [close_timeout: 200]}
+  test "a :close result during the close handshake is ignored", ctx do
+    assert_receive {:client, :handle_connect, _}
+    # suspended so the server never answers our close frame
+    :sys.suspend(ctx.server)
+    assert :ok = Minch.send_frame(ctx.client, {:close, 1000, "bye"})
+    send(ctx.client, {:close, 1001, "again"})
+    refute_receive {:client, :handle_disconnect, _}, 50
+    assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _state]}, 300
+    :sys.resume(ctx.server)
+  end
+
+  @tag server_state: %{init_result: :unauthorized}
+  @tag client_state: %{reconnect: 100}
+  test "a :close result while disconnected is ignored", ctx do
+    assert_receive {:client, :handle_disconnect, [_error, 1, _state]}
+    send(ctx.client, {:close, 1000, "bye"})
+
+    assert_receive {:client, :handle_disconnect,
+                    [%Mint.WebSocket.UpgradeFailureError{status_code: 401}, 2, _state]}
   end
 
   test "stops the client process by returning a :stop tuple from a callback", ctx do
