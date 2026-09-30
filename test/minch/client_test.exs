@@ -211,9 +211,12 @@ defmodule Minch.ClientTest do
 
   test "starts the close handshake for a :close frame sent with send_frame/2", ctx do
     assert_receive {:client, :handle_connect, _}
+    # suspended so the server cannot answer, and end the handshake, mid-assertions
+    :sys.suspend(ctx.server)
     assert :ok = Minch.send_frame(ctx.client, {:close, 1000, "bye"})
     assert {:error, :closing} = Minch.send_frame(ctx.client, {:text, "hello"})
     assert {:error, :closing} = Minch.send_frame(ctx.client, {:close, 1001, "again"})
+    :sys.resume(ctx.server)
     assert_receive {:server, :terminate, {:remote, 1000, "bye"}}
     assert_receive {:client, :handle_disconnect, [{:close, 1000, "bye"}, 1, _]}
   end
