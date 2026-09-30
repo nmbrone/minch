@@ -126,13 +126,16 @@ defmodule Minch.Conn do
   end
 
   defp handle_each([], state, _fun), do: {:noreply, state}
-  defp handle_each(_items, %State{conn: nil} = state, _fun), do: {:noreply, state}
 
   defp handle_each([item | rest], state, fun) do
     case fun.(item, state) do
       {:noreply, state} -> handle_each(rest, state, fun)
       {:stop, _, _} = stop -> stop
     end
+  end
+
+  defp handle_response(_response, %State{conn: nil} = state) do
+    {:noreply, state}
   end
 
   defp handle_response({:data, _, _}, %State{websocket: nil} = state) do
@@ -172,6 +175,8 @@ defmodule Minch.Conn do
   defp handle_response({:done, _ref}, state) do
     {:noreply, state}
   end
+
+  defp handle_frame(_frame, %State{conn: nil} = state), do: {:noreply, state}
 
   # the server initiated close
   defp handle_frame({:close, _, _} = frame, %State{close_frame: nil} = state) do

@@ -48,6 +48,11 @@ defmodule Minch.ClientTest do
       end
     end
 
+    def handle_error(error, state) do
+      send(state.receiver, {:client, :handle_error, [error, state]})
+      {:ok, state}
+    end
+
     def handle_frame(frame, state) do
       send(state.receiver, {:client, :handle_frame, [frame, state]})
       {:ok, state}
@@ -154,6 +159,15 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_frame, [{:text, "a"}, _state]}
     assert_receive {:client, :handle_frame, [{:text, "b"}, _state]}
     assert_receive {:client, :handle_disconnect, _}
+  end
+
+  test "handle_error/2 is called for a reply sent while disconnected" do
+    {:ok, client} =
+      Client.start_link(%{receiver: self(), url: "ws://example.test", reconnect: 500})
+
+    assert_receive {:client, :handle_disconnect, _}
+    send(client, {:reply, {:text, "a"}})
+    assert_receive {:client, :handle_error, [:not_connected, _state]}
   end
 
   test "handle_info/2 is called with an arbitrary message", ctx do
