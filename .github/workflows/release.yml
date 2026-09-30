@@ -35,7 +35,6 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git remote add gh-token "https://${{ secrets.github-token }}@github.com/googleapis/release-please-action.git"
           git tag -d v${{ steps.release.outputs.major }} || true
           git tag -d v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} || true
           git push origin :v${{ steps.release.outputs.major }} || true
@@ -44,3 +43,18 @@ jobs:
           git tag -a v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }} -m "Release v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}"
           git push origin v${{ steps.release.outputs.major }}
           git push origin v${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      - name: Publish to Hex
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          mix deps.get
+          mix hex.publish --yes
