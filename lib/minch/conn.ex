@@ -134,6 +134,9 @@ defmodule Minch.Conn do
     end
   end
 
+  # mint_web_socket 1.0.6 reports the {:ok, _, _} branch of Mint.WebSocket.new/4 as unreachable
+  @dialyzer {:no_match, handle_response: 2}
+
   defp handle_response(_response, %State{conn: nil} = state) do
     {:noreply, state}
   end
