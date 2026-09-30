@@ -147,6 +147,14 @@ defmodule Minch.ClientTest do
     assert_receive {:client, :handle_frame, [{:pong, "123"}, _state]}
   end
 
+  test "handle_error/2 is called for a frame that fails to decode", ctx do
+    assert_receive {:client, :handle_connect, _}
+    Server.send_frame(ctx.server, [{:text, <<0xFF>>}, {:text, "a"}])
+    assert_receive {:client, :handle_error, [{:decode_frame, {:invalid_utf8, <<0xFF>>}}, _]}
+    assert_receive {:client, :handle_frame, [{:text, "a"}, _state]}
+    refute_received {:client, :handle_frame, [{:error, _}, _state]}
+  end
+
   test "handle_frame/2 is called with frames received before a close", ctx do
     assert_receive {:client, :handle_connect, _}
     # suspended so the frames and the socket close land in the mailbox together
