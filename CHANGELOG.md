@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.2](https://github.com/nmbrone/minch/compare/v0.2.1...v0.2.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* count reconnect attempts across failed handshakes ([#89](https://github.com/nmbrone/minch/issues/89)) ([45b70be](https://github.com/nmbrone/minch/commit/45b70be30a7ab7d4d9ce3ebf985c3c1cbdcfe166))
+* deliver frames received right before a connection close ([#88](https://github.com/nmbrone/minch/issues/88)) ([0a58982](https://github.com/nmbrone/minch/commit/0a58982851ee56eb8f55b34a85e0d60fdf48513d))
+* forward the :extensions option to the upgrade ([#91](https://github.com/nmbrone/minch/issues/91)) ([f1916f9](https://github.com/nmbrone/minch/commit/f1916f98017e8cc783e2b7a9675aa6b9af92a329))
+* report an invalid URL scheme instead of crashing ([#94](https://github.com/nmbrone/minch/issues/94)) ([5336598](https://github.com/nmbrone/minch/commit/53365986771d816348d4e5967368df056fb4357c))
+* report frames that fail to decode through handle_error/2 ([#103](https://github.com/nmbrone/minch/issues/103)) ([cb05782](https://github.com/nmbrone/minch/commit/cb0578279699ca07cef7c634386967324a7b6b5f))
+* report the close frame as the disconnect reason ([#92](https://github.com/nmbrone/minch/issues/92)) ([c2fb6f6](https://github.com/nmbrone/minch/commit/c2fb6f64349a09ac540c7174d9ff709f45eb4eb6))
+* send frames replied from a callback inline ([#99](https://github.com/nmbrone/minch/issues/99)) ([efeeab7](https://github.com/nmbrone/minch/commit/efeeab72b756ae9346c28c6e2f2217b4ad13967f))
+* start the close handshake for every close frame ([#95](https://github.com/nmbrone/minch/issues/95)) ([c287ee4](https://github.com/nmbrone/minch/commit/c287ee4e3a6e22332b51edce1c723326b03b5c02))
+* treat a replied close frame like a :close result ([#102](https://github.com/nmbrone/minch/issues/102)) ([4e02550](https://github.com/nmbrone/minch/commit/4e025502ff6d42798e3492c94845aaa3fff6f032))
+
 ## [0.2.1](https://github.com/nmbrone/minch/compare/v0.2.0...v0.2.1) (2025-07-04)
 
 
